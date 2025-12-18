@@ -15,52 +15,55 @@ export const parseExcelFile = (file) => {
         console.log("Excel columns found:", Object.keys(jsonData[0] || {}));
 
         const normalizedData = jsonData.map((row, index) => {
-          // Extract EPIC NO (voter ID)
+          // EPIC NO (Voter ID)
           const epicNo = row["EPIC NO"]?.toString().trim() || "";
-          
-          // Extract English name
-          const name = row["VOTER NAME_ENG"]?.toString().trim() || "";
-          
-          // Format gender
+
+          // ✅ Extract Marathi name from "VOTER NAME"
+          const name = row["VOTER NAME"]?.toString().trim() || "";
+
+          // Gender formatting
           const rawGender = row["GENDER"]?.toString().trim() || "";
-          const gender = rawGender === "F" ? "Female" : 
-                        rawGender === "M" ? "Male" : 
-                        rawGender || "Unknown";
-          
-          // Extract age
-          const age = row["AGE"]?.toString() || "";
-          
-          // Extract serial number
-          const serialNumber = row["S.NO"] || (index + 1);
-          
-          // Prabhag is 4 (Ward 4)
+          const gender =
+            rawGender === "F"
+              ? "Female"
+              : rawGender === "M"
+              ? "Male"
+              : rawGender || "Unknown";
+
+          // Age
+          const age = row["AGE"]?.toString().trim() || "";
+
+          // Serial number
+          const serialNumber = row["S.NO"] || index + 1;
+
+          // Fixed Prabhag
           const prabhag = "प्रभाग-4";
-          
-          // Format yadiBhagAddress from Part_No. and PART_NAME
+
+          // Part number & name
           const partNo = row["Part_No."]?.toString().trim() || "";
           const partName = row["PART_NAME"]?.toString().trim() || "";
-          
-          // Format exactly as in your example: "यादी भाग क्र. 221 : 1-रेल्वे फाटा रेल्वेफाटा"
-          // But using your Excel columns: Part_No. and PART_NAME
+
+          // Marathi formatted address
           const yadiBhagAddress = `यादी भाग क्र. ${partNo} : ${partName}`;
 
           return {
             id: epicNo || `temp_${index + 1}`,
-            serialNumber: serialNumber,
-            name: name,
+            serialNumber,
+            name, // ✅ Marathi Name
             voterId: epicNo,
-            age: age,
-            gender: gender,
-            prabhag: prabhag,
-            yadiBhagAddress: yadiBhagAddress,
-            lastUpdated: Date.now()
+            age,
+            gender,
+            prabhag,
+            yadiBhagAddress,
+            lastUpdated: Date.now(),
           };
         });
 
-        // Save to JSON file
+        // Download JSON
         const jsonBlob = new Blob([JSON.stringify(normalizedData, null, 2)], {
           type: "application/json",
         });
+
         const downloadUrl = URL.createObjectURL(jsonBlob);
         const a = document.createElement("a");
         a.href = downloadUrl;
@@ -71,8 +74,8 @@ export const parseExcelFile = (file) => {
         URL.revokeObjectURL(downloadUrl);
 
         console.log(`Successfully parsed ${normalizedData.length} records`);
-        console.log("First record output:", JSON.stringify(normalizedData[0], null, 2));
-        
+        console.log("First record output:", normalizedData[0]);
+
         resolve(normalizedData);
       } catch (error) {
         console.error("Error parsing Excel file:", error);
@@ -84,7 +87,7 @@ export const parseExcelFile = (file) => {
       console.error("File reading error:", error);
       reject(error);
     };
-    
+
     reader.readAsArrayBuffer(file);
   });
 };

@@ -141,34 +141,6 @@ const SearchBar = ({
         </div>
       </div>
 
-      {/* Quick filters */}
-      {quickFilters.length > 0 && searchTerm.length === 0 && isFocused && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-2">
-          <div className="text-xs text-gray-500 font-medium mb-2 px-2">
-            <TranslatedText>Quick searches</TranslatedText>
-          </div>
-          <div className="flex flex-wrap gap-1">
-            {quickFilters.map((filter, index) => (
-              <button
-                key={index}
-                onClick={() => handleQuickFilter(filter)}
-                className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded text-xs transition-colors"
-                type="button"
-              >
-                {filter}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Search tips */}
-      {isFocused && !showAdvanced && quickFilters.length === 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10 p-3 text-xs text-gray-500">
-          <TranslatedText>Search tips: You can search by name, voter ID, booth number, or address in English or Marathi</TranslatedText>
-        </div>
-      )}
-
       {/* Advanced filters panel */}
       {showAdvanced && showFiltersButton && onFiltersChange && (
         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-30 p-4">

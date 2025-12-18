@@ -177,7 +177,7 @@ const ExportModal = ({ onClose, onExport, isLoading }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (password !== 'AkolaPRServices@3535') {
+    if (password !== 'admin86687222078805938779') {
       setError('Incorrect password');
       return;
     }
