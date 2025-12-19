@@ -18,7 +18,10 @@ const VoterSurvey = ({ voter, onUpdate }) => {
     education: '',
     occupation: '',
     issues: '',
-    remarks: ''
+    remarks: '',
+    caste: '',
+    supportStatus: 'medium',
+    hasVoted: false
   });
 
   const [saving, setSaving] = useState(false);
@@ -79,7 +82,10 @@ const VoterSurvey = ({ voter, onUpdate }) => {
       const surveyDoc = {
         voterId: voter.voterId, // ✅ link to static voter
         ...surveyData,
-        updatedAt: new Date().toISOString(),
+        caste: surveyData.caste || '',
+        supportStatus: surveyData.supportStatus || 'medium',
+        hasVoted: !!surveyData.hasVoted,
+        updatedAt: Date.now(),
       };
 
       // ✅ 1. Save to Firestore in "voter_surveys" collection
@@ -91,6 +97,9 @@ const VoterSurvey = ({ voter, onUpdate }) => {
         id: voter.voterId, // primary key in local DB
         ...surveyDoc,
       });
+
+      // Emit global update event so other components refresh
+      try { window.dispatchEvent(new CustomEvent('voter_survey_updated', { detail: { ids: [voter.voterId] } })); } catch (e) {}
 
       alert('Survey data saved successfully (both local + cloud)!');
       onUpdate?.();
@@ -148,6 +157,8 @@ const VoterSurvey = ({ voter, onUpdate }) => {
   const categories = ['', 'General', 'OBC', 'SC', 'ST', 'Other'];
   const educationLevels = ['', 'Nothing', '10th Pass', '12th Pass', 'Graduation', 'Upper Education'];
   const occupations = ['', 'Student', 'Farmer', 'Business', 'Service', 'Professional', 'Housewife', 'Retired', 'Unemployed', 'Other'];
+  const casteOptions = ['Brahmin','Maratha','Kunbi','Teli','Lohar','Dhangar','Gond','Chamar','Sunni','Shia','RC','Protestant','Jat','Other'];
+  const supportOptions = ['low','medium','high','supporter','not-supporter'];
 
   return (
     <div className="space-y-6 bg-white rounded-xl">
@@ -355,6 +366,26 @@ const VoterSurvey = ({ voter, onUpdate }) => {
                   <option key={occ} value={occ}><TranslatedText>{occ || 'Select Occupation'}</TranslatedText></option>
                 ))}
               </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+            <div>
+              <label className="block text-sm text-gray-700 mb-2 font-medium">Caste</label>
+              <select value={surveyData.caste} onChange={(e) => handleInputChange('caste', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white">
+                <option value="">Select caste</option>
+                {casteOptions.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm text-gray-700 mb-2 font-medium">Support Status</label>
+              <select value={surveyData.supportStatus} onChange={(e) => handleInputChange('supportStatus', e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg bg-white">
+                {supportOptions.map(s => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <input id="sv_hasVoted" type="checkbox" checked={surveyData.hasVoted} onChange={(e) => handleInputChange('hasVoted', e.target.checked)} />
+              <label htmlFor="sv_hasVoted" className="text-sm text-gray-700">Mark as voted</label>
             </div>
           </div>
         </div>

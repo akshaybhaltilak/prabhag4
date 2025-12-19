@@ -14,6 +14,7 @@ import Team from './Components/Team';
 import Contactus from './Components/Contactus';
 import Setting from './Components/Setting';
 import NewSurvey from './Components/NewSurvey';
+import BulkSurvey from './Pages/BulkSurvey';
 import { VoterProvider } from './Context/VoterContext';
 import usePendingSync from './hooks/usePendingSync';
 import { syncPendingWrites } from './services/pendingSync';
@@ -547,6 +548,14 @@ function App() {
                   element={
                     <ProtectedRoute isAuthenticated={isAuthenticated}>
                       <NewSurvey />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/bulk-survey"
+                  element={
+                    <ProtectedRoute isAuthenticated={isAuthenticated}>
+                      <BulkSurvey />
                     </ProtectedRoute>
                   }
                 />

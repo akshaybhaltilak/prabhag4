@@ -79,6 +79,18 @@ const FullVoterDetails = () => {
         }
       };
       loadLocalSurvey();
+
+      // Listen for survey updates from other parts of the app (bulk survey saved)
+      const onSurveyUpdated = (e) => {
+        try {
+          const ids = e?.detail?.ids || [];
+          if (ids.includes(voter.voterId)) {
+            loadLocalSurvey();
+          }
+        } catch (err) {}
+      };
+      window.addEventListener('voter_survey_updated', onSurveyUpdated);
+      return () => window.removeEventListener('voter_survey_updated', onSurveyUpdated);
     }
   }, [voter]);
 
@@ -531,6 +543,18 @@ const FullVoterDetails = () => {
                   <DetailRow
                     label="Phone Number"
                     value={surveyData.phone || 'Not available'}
+                  />
+                  <DetailRow
+                    label="Caste"
+                    value={surveyData.caste || surveyData.category || 'Not specified'}
+                  />
+                  <DetailRow
+                    label="Support Status"
+                    value={dynamic.supportStatus ?? surveyData.supportStatus ?? 'unknown'}
+                  />
+                  <DetailRow
+                    label="Voted"
+                    value={(dynamic.hasVoted ?? surveyData.hasVoted) ? 'Yes' : 'No'}
                   />
                   <DetailRow
                     label="Polling Station Address"

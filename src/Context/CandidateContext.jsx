@@ -18,14 +18,14 @@ export const CandidateProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   // Default candidate information
-  const defaultCandidateInfo = {
+   const defaultCandidateInfo = {
     mainFrontImage:'',
     mainWhatsappBrandingImage:'', 
     logoImageCircle: "/logobjp.jpg",
     TagLine: "अकोला महानगरपालिका सार्वत्रिक निवडणूक २०२६",
     ReSellerName: "Powered By JanNetaa",
-    name: 'अकोला प्रभाग क्रमांक ४',
-    namecan: 'अ.- संदीप  रामकृष्ण  शेगोकार ब.- ______________ क.- पल्लवी  शिवाजीराव मोरे (गावंडे ) ड.- मिलिंद डिगांबर राऊत',
+    name: 'अकोला प्रभाग क्रमांक 4',
+    namecan: '',
     party: "भारतीय जनता पार्टी",
     electionSymbol: "कमळ",
     slogan:'सबका साथ, सबका विकास',

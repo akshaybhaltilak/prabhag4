@@ -11,8 +11,8 @@ export default defineConfig({
     VitePWA({
       registerType: "autoUpdate",
       manifest: {
-        name: "Akola 4",
-        short_name: "Akola 4",
+        name: "Prabhag 4",
+        short_name: "Prabhag 4",
         start_url: "/",
         display: "standalone",
         background_color: "#ffffff",

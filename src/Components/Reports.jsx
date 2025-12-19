@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  FiUsers, 
-  FiPieChart, 
-  FiBarChart2, 
-  FiMap, 
+import {
+  FiUsers,
+  FiPieChart,
+  FiBarChart2,
+  FiMap,
   FiFilter,
   FiRefreshCw,
   FiCheckCircle,
-  FiClock
+  FiClock,
+  FiArrowLeft
 } from 'react-icons/fi';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../Firebase/config';
 import TranslatedText from './TranslatedText';
+import { Link } from 'react-router-dom';
 
 const Reports = () => {
   const [staticVoters, setStaticVoters] = useState([]);
@@ -45,12 +47,12 @@ const Reports = () => {
       try {
         const voterSurveySnapshot = await getDocs(collection(db, 'voter_survey'));
         const voterDynamicSnapshot = await getDocs(collection(db, 'voter_dynamic'));
-        
+
         const surveyData = voterSurveySnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         }));
-        
+
         const dynamicData = voterDynamicSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
@@ -71,7 +73,7 @@ const Reports = () => {
   const totalVoters = staticVoters.length;
   const maleVoters = staticVoters.filter(voter => voter.gender === 'Male').length;
   const femaleVoters = staticVoters.filter(voter => voter.gender === 'Female').length;
-  
+
   const ageGroups = {
     '18-25': staticVoters.filter(voter => parseInt(voter.age) >= 18 && parseInt(voter.age) <= 25).length,
     '26-40': staticVoters.filter(voter => parseInt(voter.age) >= 26 && parseInt(voter.age) <= 40).length,
@@ -115,9 +117,9 @@ const Reports = () => {
   const ProgressBar = ({ percentage, color, height = 8 }) => {
     return (
       <div className="w-full bg-gray-200 rounded-full" style={{ height: `${height}px` }}>
-        <div 
+        <div
           className="rounded-full transition-all duration-1000 ease-out"
-          style={{ 
+          style={{
             width: `${percentage}%`,
             height: `${height}px`,
             backgroundColor: color
@@ -152,8 +154,8 @@ const Reports = () => {
         <TranslatedText>{label}</TranslatedText>
       </span>
       <div className="flex items-center gap-3 flex-1">
-        <ProgressBar 
-          percentage={(value / total) * 100} 
+        <ProgressBar
+          percentage={(value / total) * 100}
           color={color}
           height={6}
         />
@@ -183,15 +185,28 @@ const Reports = () => {
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
-        <div className="px-4 py-4">
-          <h1 className="text-xl font-bold text-gray-900 mb-1">
-            <TranslatedText>Voter Reports</TranslatedText>
-          </h1>
-          <p className="text-gray-600 text-sm">
-            <TranslatedText>Easy-to-understand voter analytics</TranslatedText>
-          </p>
+
+      <div className="flex mb-3 mt-5 justify-between gap-3">
+        <div className="flex">
+          <Link to="/">
+            <button
+              className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center hover:bg-gray-200 transition-all"
+            >
+              <FiArrowLeft className="text-gray-600" />
+            </button>
+          </Link>
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">
+              <TranslatedText>Reports And Analysis</TranslatedText>
+            </h1>
+            <p className="text-gray-500 text-sm">
+              <TranslatedText>Get detailed reports and analysis</TranslatedText>
+            </p>
+          </div>
         </div>
+        <div>
+        </div>
+
       </div>
 
       {/* Mobile Tabs */}
@@ -207,11 +222,10 @@ const Reports = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all flex-shrink-0 ${
-                activeTab === tab.id
-                  ? 'bg-orange-500 text-white shadow-sm'
-                  : 'text-gray-600 bg-gray-100'
-              }`}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all flex-shrink-0 ${activeTab === tab.id
+                ? 'bg-orange-500 text-white shadow-sm'
+                : 'text-gray-600 bg-gray-100'
+                }`}
             >
               <tab.icon className="w-4 h-4" />
               <span className="text-sm font-medium">
@@ -239,7 +253,7 @@ const Reports = () => {
             </label>
             <select
               value={filters.gender}
-              onChange={(e) => setFilters({...filters, gender: e.target.value})}
+              onChange={(e) => setFilters({ ...filters, gender: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none text-sm"
             >
               <option value=""><TranslatedText>All Genders</TranslatedText></option>
@@ -247,14 +261,14 @@ const Reports = () => {
               <option value="Female"><TranslatedText>Female</TranslatedText></option>
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               <TranslatedText>Area</TranslatedText>
             </label>
             <select
               value={filters.prabhag}
-              onChange={(e) => setFilters({...filters, prabhag: e.target.value})}
+              onChange={(e) => setFilters({ ...filters, prabhag: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none text-sm"
             >
               <option value=""><TranslatedText>All Areas</TranslatedText></option>
@@ -265,14 +279,14 @@ const Reports = () => {
               ))}
             </select>
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               <TranslatedText>Age Group</TranslatedText>
             </label>
             <select
               value={filters.ageRange}
-              onChange={(e) => setFilters({...filters, ageRange: e.target.value})}
+              onChange={(e) => setFilters({ ...filters, ageRange: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none text-sm"
             >
               <option value=""><TranslatedText>All Ages</TranslatedText></option>
@@ -292,14 +306,14 @@ const Reports = () => {
         {activeTab === 'overview' && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <StatCard 
+              <StatCard
                 icon={FiUsers}
                 title="Total Voters"
                 value={totalVoters}
                 subtitle="Registered voters"
                 color="blue"
               />
-              <StatCard 
+              <StatCard
                 icon={FiCheckCircle}
                 title="Surveys Done"
                 value={surveyStats.totalSurveys}
@@ -313,13 +327,13 @@ const Reports = () => {
                 <TranslatedText>Gender Breakdown</TranslatedText>
               </h3>
               <div className="space-y-3">
-                <DistributionItem 
+                <DistributionItem
                   label="Male Voters"
                   value={maleVoters}
                   total={totalVoters}
                   color="#3b82f6"
                 />
-                <DistributionItem 
+                <DistributionItem
                   label="Female Voters"
                   value={femaleVoters}
                   total={totalVoters}
@@ -334,7 +348,7 @@ const Reports = () => {
               </h3>
               <div className="space-y-3">
                 {Object.entries(ageGroups).map(([ageGroup, count]) => (
-                  <DistributionItem 
+                  <DistributionItem
                     key={ageGroup}
                     label={`${ageGroup} Years`}
                     value={count}
@@ -366,7 +380,7 @@ const Reports = () => {
                   </div>
                   <ProgressBar percentage={(maleVoters / totalVoters) * 100} color="#3b82f6" />
                 </div>
-                
+
                 <div>
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-gray-700 text-sm">
@@ -410,7 +424,7 @@ const Reports = () => {
               </h3>
               <div className="space-y-3">
                 {Object.entries(prabhagDistribution)
-                  .sort(([,a], [,b]) => b - a)
+                  .sort(([, a], [, b]) => b - a)
                   .slice(0, 8)
                   .map(([prabhag, count]) => (
                     <div key={prabhag} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
@@ -431,7 +445,7 @@ const Reports = () => {
               </h3>
               <div className="space-y-3">
                 {Object.entries(boothDistribution)
-                  .sort(([,a], [,b]) => b - a)
+                  .sort(([, a], [, b]) => b - a)
                   .slice(0, 6)
                   .map(([booth, count]) => (
                     <div key={booth} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
@@ -452,14 +466,14 @@ const Reports = () => {
         {activeTab === 'surveys' && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <StatCard 
+              <StatCard
                 icon={FiCheckCircle}
                 title="Completed"
                 value={surveyStats.completedSurveys}
                 subtitle="Surveys done"
                 color="green"
               />
-              <StatCard 
+              <StatCard
                 icon={FiClock}
                 title="Pending"
                 value={surveyStats.pendingSurveys}
@@ -484,7 +498,7 @@ const Reports = () => {
                   </div>
                   <ProgressBar percentage={surveyStats.surveyRate} color="#10b981" />
                 </div>
-                
+
                 <div className="text-center text-gray-600 text-sm">
                   <TranslatedText>{surveyStats.totalSurveys} surveys completed out of {totalVoters} total voters</TranslatedText>
                 </div>

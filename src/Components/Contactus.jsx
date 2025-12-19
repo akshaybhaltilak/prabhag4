@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import TranslatedText from './TranslatedText';
-import { FiMail, FiPhone, FiMapPin, FiGlobe, FiMessageCircle } from 'react-icons/fi';
+import { FiMail, FiPhone, FiMapPin, FiGlobe, FiMessageCircle, FiArrowLeft } from 'react-icons/fi';
+import { Link } from 'react-router-dom';
 
 const Contactus = () => {
   const [formData, setFormData] = useState({
@@ -54,9 +55,32 @@ const Contactus = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-100 px-4 sm:px-6 lg:px-8">
       {/* Company Information Section */}
       <div className="max-w-7xl mx-auto">
+
+        <div className="flex mb-3 mt-5 justify-between gap-3">
+          <div className="flex">
+            <Link to="/">
+              <button
+                className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center hover:bg-gray-200 transition-all"
+              >
+                <FiArrowLeft className="text-gray-600" />
+              </button>
+            </Link>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">
+                <TranslatedText>Contact Us</TranslatedText>
+              </h1>
+              <p className="text-gray-500 text-sm">
+                <TranslatedText>Get in touch with us</TranslatedText>
+              </p>
+            </div>
+          </div>
+          <div>
+          </div>
+
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-16">
           {/* Contact Information */}
@@ -64,7 +88,7 @@ const Contactus = () => {
             <h2 className="text-2xl font-bold text-gray-900 mb-6">
               <TranslatedText>Our Contact Information</TranslatedText>
             </h2>
-            
+
             <div className="space-y-6">
               <div className="flex items-start gap-4">
                 <div className="w-10 h-10 bg-orange-100 rounded-lg flex items-center justify-center">
@@ -91,7 +115,7 @@ const Contactus = () => {
                     <TranslatedText>Phone</TranslatedText>
                   </h3>
                   <p className="text-gray-600 mt-1">+91 9689918086</p>
-                  <p className="text-gray-600 mt-1">+91 7391913935</p>
+                  {/* <p className="text-gray-600 mt-1">+91 7391913935</p> */}
                 </div>
               </div>
 
@@ -116,7 +140,7 @@ const Contactus = () => {
                     <TranslatedText>Website</TranslatedText>
                   </h3>
                   <p className="text-gray-600 mt-1">theprservices.com</p>
-                  <p className="text-gray-600 mt-1">webreich.vercel.app</p>
+                  {/* <p className="text-gray-600 mt-1">webreich.vercel.app</p> */}
                 </div>
               </div>
             </div>
@@ -221,7 +245,7 @@ const Contactus = () => {
         </div>
 
         {/* FAQ Section */}
-        <div className="mt-16">
+        {/* <div className="mt-16">
           <h2 className="text-2xl font-bold text-gray-900 mb-8 text-center">
             <TranslatedText>Frequently Asked Questions</TranslatedText>
           </h2>
@@ -238,7 +262,7 @@ const Contactus = () => {
               </div>
             ))}
           </div>
-        </div>
+        </div> */}
       </div>
     </div>
   );

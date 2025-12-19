@@ -88,11 +88,51 @@ const VoterList = memo(({ voters = [], loading = false }) => {
           <div className="flex items-center justify-between">
             {/* Left Section - Main Info */}
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <h3 className="font-semibold text-gray-800 text-sm truncate flex items-center gap-1">
-                  <FiUser className="text-orange-500 text-lg flex-shrink-0" />
-                  <span><TranslatedText>{voter.name || 'N/A'}</TranslatedText></span>
+              <div className="flex flex-col items-left">
+
+                <h3 className="font-semibold text-gray-700 text-sm truncate flex items-center gap-1">
+                  {/* <FiUser className="text-orange-500 text-lg flex-shrink-0" /> */}
+                  {voter.serialNumber && (
+                    <span className='text-gray-700'>{voter.serialNumber})</span>
+                  )}
+                  <div className='flex w-full justify-between'>
+                    {voter.voterNameEng ? (
+                      <span className="">{voter.name}</span>
+                    ) : (
+                      <span className=''><TranslatedText>{voter.name || 'N/A'}</TranslatedText></span>
+                    )}
+                    {voter.voterId && (
+                      <span className='text-gray-700 text-sm'>{voter.voterId}</span>
+                    )}
+                  </div>
+
                 </h3>
+                <div className='flex  justify-between w-full'>
+                  {voter.name && voter.voterNameEng && (
+                    <div className="text-sm font-semibold text-gray-700 truncate">{voter.voterNameEng}</div>
+                  )}
+
+                  <div className=''>
+                    {/* Age & Gender */}
+                    {voter.age && (
+                      <span className="text-gray-800 font-semibold text-sm ">
+                        {voter.age}
+                      </span>
+                    )}
+
+                    {voter.gender && (
+                      <span className="text-orange-700 font-bold text-sm capitalize">
+                        |{voter.gender}
+                      </span>
+                    )}
+
+                    {voter.boothNumber && (
+                      <span className="ml-2 text-gray-700 text-sm ">
+                        बू.क्र.{voter.boothNumber}
+                      </span>
+                    )}
+                  </div>
+                </div>
 
                 {/* Voting Status Badge */}
                 {/* {voter.hasVoted !== undefined && (
@@ -142,62 +182,37 @@ const VoterList = memo(({ voters = [], loading = false }) => {
               </div>
 
               {/* Bottom Row - IDs */}
-              <div className="flex items-center gap-3 text-xs text-gray-400 mt-1">
+              <div className="flex items-center text-xs text-gray-400 ">
+                {/* <FiMapPin className="text-orange-500 font-bold flex-shrink-0 text-xs" />
                 {voter.boothNumber && (
-                  <span className="flex items-center bg-orange-100 gap-1 text-orange-500 px-1.5 py-0.5 rounded">
-                    {/* <FiHome className="text-xs" /> */}
+                  <span className="flex items-center bg-orange-100 gap-1 ml-1 text-orange-500 px-1.5 rounded">
                     {voter.boothNumber}
                   </span>
-                )}
+                )} */}
 
-                {/* Age & Gender */}
-                {voter.age && (
-                  <span className="bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded">
-                    <TranslatedText>{voter.age}</TranslatedText>y
-                  </span>
-                )}
-
-                {voter.gender && (
-                  <span className="bg-orange-50 text-orange-700 px-1.5 py-0.5 rounded capitalize">
-                    <TranslatedText>{voter.gender}</TranslatedText>
-                  </span>
-                )}
-                {voter.voterId && (
-                  <span>ID: {voter.voterId}</span>
-                )}
-                {voter.serialNumber && (
-                  <span>Serial: {voter.serialNumber}</span>
+                {(voter.pollingStationAddress || voter.yadiBhagAddress) && (
+                  <div className="">
+                    <div className="flex gap-1 text-xs text-gray-500">
+                      <span className="flex">
+                        <FiMapPin className="text-orange-500 font-bold  text-xs mr-1" />
+                        {voter.pollingStationAddress || voter.yadiBhagAddress}
+                      </span>
+                    </div>
+                  </div>
                 )}
               </div>
             </div>
-
-            {/* Right Section - Action Button */}
-            <button
-              onClick={(e) => handleViewDetails(voter.id, e)}
-              className="ml-2 p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-150 flex-shrink-0"
-              title="View Details"
-            >
-              <FiEye className="w-3.5 h-3.5" />
-            </button>
           </div>
 
           {/* Address - Only show if available and space permits */}
-          {(voter.pollingStationAddress || voter.yadiBhagAddress) && (
-            <div className="mt-1 pt-1 border-t border-gray-100">
-              <div className="flex items-start gap-1 text-xs text-gray-500">
-                <FiMapPin className="text-orange-500 mt-0.5 flex-shrink-0 text-xs" />
-                <span className="line-clamp-1">
-                  {voter.pollingStationAddress || voter.yadiBhagAddress}
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
+
+
+                    </div>
       ))}
-    </div>
-  );
+                  </div>
+                );
 });
 
-VoterList.displayName = 'VoterList';
+                VoterList.displayName = 'VoterList';
 
-export default VoterList;
+                export default VoterList;

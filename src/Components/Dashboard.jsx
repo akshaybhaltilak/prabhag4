@@ -1,14 +1,22 @@
-import React, { useEffect, useState, lazy, Suspense, useMemo } from "react";
+import React, {
+  useEffect,
+  useState,
+  lazy,
+  Suspense,
+  useMemo,
+} from "react";
 import Sanscript from "sanscript";
 import localforage from "localforage";
 import * as XLSX from "xlsx";
-import { FiLoader, FiDownload } from "react-icons/fi";
+import { FiLoader, FiDownload, FiChevronLeft, FiChevronRight, FiArrowLeft } from "react-icons/fi";
 import { useCandidate } from "../Context/CandidateContext";
+import { Link } from "react-router-dom";
+import TranslatedText from "./TranslatedText";
 
 const VoterList = lazy(() => import("./VoterList"));
 const SearchBar = lazy(() => import("./SearchBar"));
 
-/* ---------------- FAST NORMALIZE ---------------- */
+/* ---------------- NORMALIZE ---------------- */
 const normalize = (str = "") =>
   str
     .toLowerCase()
@@ -18,16 +26,31 @@ const normalize = (str = "") =>
     .replace(/\s+/g, " ")
     .trim();
 
-/* ---------------- BUILD SEARCH INDEX (ONCE) ---------------- */
+/* ---------------- LANGUAGE DETECTION ---------------- */
+const isMarathi = (text = "") => /[\u0900-\u097F]/.test(text);
+
+/* ---------------- BUILD SEARCH INDEX ---------------- */
 const buildSearchIndex = (v) => {
-  let latin = "";
+  const mrName = v.name || "";
+  const engName = v.voterNameEng || "";
+
+  let mrToEng = "";
+  let engToMr = "";
+
   try {
-    latin = Sanscript.t(v.name || "", "devanagari", "itrans");
-  } catch {}
+    if (mrName) {
+      mrToEng = Sanscript.t(mrName, "devanagari", "itrans");
+    }
+    if (engName) {
+      engToMr = Sanscript.t(engName, "itrans", "devanagari");
+    }
+  } catch { }
 
   return normalize(`
-    ${v.name}
-    ${latin}
+    ${mrName}
+    ${engName}
+    ${mrToEng}
+    ${engToMr}
     ${v.voterId}
     ${v.boothNumber}
     ${v.address}
@@ -45,36 +68,35 @@ export default function Dashboard() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
 
+  const [page, setPage] = useState(1);
+  const pageSize = 50;
+
   /* ---------------- EXPORT MODAL ---------------- */
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportPassword, setExportPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
-  const [exporting, setExporting] = useState(false);
 
-  /* ---------------- LOAD DATA (ULTRA FAST) ---------------- */
+  /* ---------------- LOAD DATA ---------------- */
   useEffect(() => {
     const load = async () => {
       setLoading(true);
 
-      // 1️⃣ Try IndexedDB first
-      const cached = await localforage.getItem("voters_indexed");
+      const cached = await localforage.getItem("voters_indexed_v2");
       if (cached?.length) {
         setAllVoters(cached);
         setLoading(false);
         return;
       }
 
-      // 2️⃣ Load from public JSON (once)
       const res = await fetch("/voter.json");
       const raw = await res.json();
 
-      // 3️⃣ Build index in background
       requestIdleCallback(async () => {
         const indexed = raw.map(v => ({
           ...v,
           _search: buildSearchIndex(v),
         }));
-        await localforage.setItem("voters_indexed", indexed);
+        await localforage.setItem("voters_indexed_v2", indexed);
         setAllVoters(indexed);
         setLoading(false);
       });
@@ -83,79 +105,62 @@ export default function Dashboard() {
     load();
   }, []);
 
-  /* ---------------- SEARCH (INSTANT) ---------------- */
-  const filtered = useMemo(() => {
-    if (!search) return allVoters.slice(0, 50);
+  /* ---------------- SEARCH ---------------- */
+  const filteredAll = useMemo(() => {
+    if (!search) return allVoters;
 
-    const terms = normalize(search).split(" ");
-    return allVoters
-      .filter(v => terms.every(t => v._search?.includes(t)))
-      .slice(0, 50);
+    const normalizedSearch = normalize(search);
+    const terms = normalizedSearch.split(" ").filter(Boolean);
+
+    return allVoters.filter(v =>
+      terms.every(t => v._search?.includes(t))
+    );
   }, [search, allVoters]);
 
-  /* ---------------- EXCEL EXPORT (UNCHANGED) ---------------- */
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+
+  const totalFiltered = filteredAll.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+
+  // Ensure current page is within bounds when filtered result changes
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [totalPages, page]);
+
+  const paginated = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredAll.slice(start, start + pageSize);
+  }, [filteredAll, page]);
+
+  /* ---------------- EXPORT ---------------- */
   const exportToExcel = (rows) => {
     if (!rows.length) return;
 
-    const exportData = rows.map((voter, i) => {
-      const survey = voter.survey || {};
-      const familyMembers = voter.familyMembers || {};
-
-      return {
-        "Serial Number": voter.serialNumber || i + 1,
-        "Voter ID": voter.voterId || "",
-        "Name": voter.name || "",
-        "Age": voter.age || "",
-        "Gender": voter.gender || "",
-        "Booth Number": voter.boothNumber || "",
-        "Polling Station": voter.pollingStationAddress || "",
-        "Address": survey.address || voter.address || "",
-        "House Number": voter.houseNumber || "",
-        "Phone": survey.mobile || voter.phone || "",
-        "Has Voted": voter.hasVoted || voter.voted ? "Yes" : "No",
-        "Family Members Count": Object.keys(familyMembers).length,
-        "Family Members Details": Object.values(familyMembers).join("; "),
-        "Family Income": survey.familyIncome || "",
-        "Education": survey.education || "",
-        "Occupation": survey.occupation || "",
-        "Caste": survey.caste || "",
-        "Political Affiliation": survey.politicalAffiliation || "",
-        "Issues": survey.issues || "",
-        "Support Status": voter.supportStatus || "",
-        "Assigned Karyakarta": voter.assignedKaryakarta || "",
-        "Village": voter.village || "",
-        "Prabhag": voter.prabhag || "",
-        "Surname": voter.surname || "",
-        "Father Name": voter.fatherName || "",
-        "Yadi Bhag Address": voter.yadiBhagAddress || "",
-        "Created At": voter.createdAt || "",
-        "Updated At": voter.updatedAt || "",
-      };
-    });
-
-    const ws = XLSX.utils.json_to_sheet(exportData);
+    const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Voters");
     XLSX.writeFile(wb, `voters_${Date.now()}.xlsx`);
   };
 
   const confirmExport = () => {
-    if (exportPassword !== candidateInfo.password) {
+    const requiredPassword = 'demoakola123'; // Export password set as requested
+    if (exportPassword !== requiredPassword) {
       setPasswordError("Incorrect password");
       return;
     }
-    setExporting(true);
-    exportToExcel(filtered);
-    setExporting(false);
+    exportToExcel(filteredAll);
     setShowExportModal(false);
+    setExportPassword("");
   };
 
-  /* ---------------- SINGLE CLEAN LOADER ---------------- */
+  /* ---------------- LOADER ---------------- */
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50">
         <FiLoader className="animate-spin text-orange-500 text-2xl mr-3" />
-        <span className="text-gray-600">Loading voter database…</span>
+        Loading voter database…
       </div>
     );
   }
@@ -163,28 +168,114 @@ export default function Dashboard() {
   /* ---------------- UI ---------------- */
   return (
     <div className="min-h-screen bg-gray-50 p-4">
-      <div className="flex gap-3 items-center mb-2  ">
+      <div className="flex mb-3 justify-between gap-3">
+        <div className="flex">
+          <Link to="/">
+            <button
+              className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center hover:bg-gray-200 transition-all"
+            >
+              <FiArrowLeft className="text-gray-600" />
+            </button>
+          </Link>
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">
+              <TranslatedText>Search Voters</TranslatedText>
+            </h1>
+            <p className="text-gray-500 text-sm">
+              <TranslatedText>Search all voters</TranslatedText>
+            </p>
+          </div>
+        </div>
+        <div>
+          <button
+            onClick={() => setShowExportModal(true)}
+            className="z-50 flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-md shadow-lg hover:shadow-xl"
+            title="Export filtered voters"
+          >
+            <FiDownload />
+            <span className="hidden md:inline">Export</span>
+          </button>
+        </div>
+
+      </div>
+
+
+
+      <div className="flex sticky top-18 gap-3 items-center mb-2">
         <SearchBar
-          placeholder="Search name / voter id / booth (English or Marathi)"
+          placeholder="Search Marathi किंवा English नाव"
           onSearch={setSearch}
           className="w-full"
         />
 
-        <button
-          onClick={() => setShowExportModal(true)}
-          className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded shadow"
-        >
-          <FiDownload /> Export
-        </button>
+
       </div>
 
       <p className="text-xs text-gray-500 mb-3">
-        Showing {filtered.length} of {allVoters.length} voters
+        Showing {paginated.length} of {totalFiltered} voters
       </p>
 
-      <Suspense fallback={<div className="text-center py-6">Loading list…</div>}>
-        <VoterList voters={filtered} />
+      <Suspense fallback={<div className="py-6 text-center">Loading list…</div>}>
+        <VoterList voters={paginated} />
       </Suspense>
+
+      {/* Pagination controls (bottom) */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center mt-4 bg-white p-3 rounded-lg border border-gray-200">
+          {/* <div className="flex items-center gap-2 text-sm text-gray-600">
+            <span>Showing {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, totalFiltered)} of {totalFiltered}</span>
+          </div> */}
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(1)}
+              disabled={page === 1}
+              className={`px-3 py-1 rounded ${page === 1 ? 'bg-gray-100 text-gray-400' : 'bg-white hover:bg-gray-50 border'}`}
+            >First</button>
+
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className={`p-2 rounded ${page === 1 ? 'bg-gray-100 text-gray-400' : 'bg-white hover:bg-gray-50 border'}`}
+              aria-label="Previous"
+            >
+              <FiChevronLeft />
+            </button>
+
+            {/* Page numbers window */}
+            {/* {Array.from({ length: Math.min(7, totalPages) }).map((_, idx) => {
+              const half = Math.floor(7 / 2);
+              let start = Math.max(1, page - half);
+              let end = Math.min(totalPages, start + 6);
+              if (end - start < 6) start = Math.max(1, end - 6);
+              const pageNum = start + idx;
+              if (pageNum > end) return null;
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setPage(pageNum)}
+                  className={`px-3 py-1 rounded ${pageNum === page ? 'bg-orange-500 text-white' : 'bg-white hover:bg-gray-50 border'}`}
+                >{pageNum}</button>
+              );
+            })} */}
+
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className={`p-2 rounded ${page === totalPages ? 'bg-gray-100 text-gray-400' : 'bg-white hover:bg-gray-50 border'}`}
+              aria-label="Next"
+            >
+              <FiChevronRight />
+            </button>
+
+            <button
+              onClick={() => setPage(totalPages)}
+              disabled={page === totalPages}
+              className={`px-3 py-1 rounded ${page === totalPages ? 'bg-gray-100 text-gray-400' : 'bg-white hover:bg-gray-50 border'}`}
+            >Last</button>
+          </div>
+        </div>
+      )}
 
       {/* EXPORT MODAL */}
       {showExportModal && (
@@ -198,9 +289,13 @@ export default function Dashboard() {
               value={exportPassword}
               onChange={(e) => setExportPassword(e.target.value)}
             />
-            {passwordError && <p className="text-red-500 text-sm">{passwordError}</p>}
+            {passwordError && (
+              <p className="text-red-500 text-sm">{passwordError}</p>
+            )}
             <div className="flex justify-end gap-2 mt-4">
-              <button onClick={() => setShowExportModal(false)}>Cancel</button>
+              <button onClick={() => setShowExportModal(false)}>
+                Cancel
+              </button>
               <button
                 onClick={confirmExport}
                 className="bg-green-500 text-white px-4 py-2 rounded"
@@ -211,6 +306,9 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Floating export button */}
+
     </div>
   );
 }

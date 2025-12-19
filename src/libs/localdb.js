@@ -5,12 +5,30 @@ import Dexie from "dexie";
 export const dbLocal = new Dexie("ElectionDB");
 
 // ✅ Define all stores including voter_dynamic
+// Upgrade DB: add caste & improved indexes
 dbLocal.version(1).stores({
   voters: "id, name, voterId, age, gender, boothNumber, pollingStationAddress, prabhag, yadiBhagAddress, lastUpdated",
   voter_surveys: "id, voterId, phone, whatsapp, city, education, occupation, category, issues, remarks, hasVoted, supportStatus, updatedAt",
   voter_dynamic: "id, voterId, updatedAt", // ✅ Added missing table
   pending_writes: "++id, collection, docId, payload, createdAt, attempts",
+  filter_cache: '++id, type, data, timestamp',
+  filter_stats: '++id, category, count, timestamp'
 });
+
+// New version to add caste index and supportStatus index if needed
+try {
+  dbLocal.version(2).stores({
+    voters: "id, name, voterId, age, gender, boothNumber, pollingStationAddress, prabhag, yadiBhagAddress, lastUpdated, marathi_surname, english_surname, voterNameEng, surname",
+    voter_surveys: "id, voterId, phone, whatsapp, city, education, occupation, category, issues, remarks, hasVoted, supportStatus, caste, updatedAt",
+    voter_dynamic: "id, voterId, updatedAt, hasVoted, supportStatus",
+    pending_writes: "++id, collection, docId, payload, createdAt, attempts",
+    filter_cache: '++id, type, data, timestamp',
+    filter_stats: '++id, category, count, timestamp'
+  });
+} catch (e) {
+  // If DB already at v2 or higher, ignore
+  console.warn('DB version upgrade skipped or already at latest version', e);
+}
 
 // ✅ Local helpers
 export const localBulkPut = async (rows) => dbLocal.voters.bulkPut(rows);
@@ -29,7 +47,7 @@ export const putDynamic = async (obj) => {
 export const getAllVoters = async () => {
   try {
     console.log('📥 Fetching all voters from IndexedDB...');
-    const voters = await db.voters.toArray();
+    const voters = await dbLocal.voters.toArray();
     console.log(`✅ Retrieved ${voters.length} voters from IndexedDB`);
     return voters;
   } catch (error) {
@@ -128,7 +146,7 @@ export const saveSurveyLocal = async (voterId, surveyData) => {
 
 export const getVoterSurveys = async () => {
   try {
-    const surveys = await db.voter_surveys.toArray();
+    const surveys = await dbLocal.voter_surveys.toArray();
     console.log(`✅ Retrieved ${surveys.length} voter surveys from IndexedDB`);
     return surveys;
   } catch (error) {

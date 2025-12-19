@@ -43,50 +43,85 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
   const pageSize = 20;
   const currentVoterId = useMemo(() => voter?.id || voter?.voterId, [voter]);
 
-  // 🔸 Enhanced search function with transliteration
+  // 🔸 Enhanced search function with transliteration and Marathi/English fields
   const searchVoters = (voters, query) => {
-    if (!query.trim()) return voters;
+    if (!query || !query.trim()) return voters;
 
-    const searchTerm = query.toLowerCase().trim();
-    
+    const searchTerm = query.toString().trim().toLowerCase();
+    const isDevanagari = /[\u0900-\u097F]/.test(query);
+
     return voters.filter(v => {
-      const name = v.name || '';
-      const voterId = v.voterId || '';
-      const serialNumber = v.serialNumber?.toString() || '';
-      
-      // Direct search
-      if (name.toLowerCase().includes(searchTerm) ||
-          voterId.toLowerCase().includes(searchTerm) ||
-          serialNumber.includes(searchTerm)) {
+      const nameMar = (v.name || '') + '';
+      const nameEng = (v.voterNameEng || v.name || '') + '';
+      const marathiSurname = (v.marathi_surname || '') + '';
+      const englishSurname = (v.english_surname || '') + '';
+      const voterId = (v.voterId || v.id || '') + '';
+      const serialNumber = (v.serialNumber || '').toString();
+
+      const nameMarLower = nameMar.toLowerCase();
+      const nameEngLower = nameEng.toLowerCase();
+      const marathiSurnameLower = marathiSurname.toLowerCase();
+      const englishSurnameLower = englishSurname.toLowerCase();
+      const voterIdLower = voterId.toLowerCase();
+
+      // Exact text matches (works for both Marathi and English inputs)
+      if (
+        nameMarLower.includes(searchTerm) ||
+        nameEngLower.includes(searchTerm) ||
+        marathiSurnameLower.includes(searchTerm) ||
+        englishSurnameLower.includes(searchTerm) ||
+        voterIdLower.includes(searchTerm) ||
+        serialNumber.includes(searchTerm)
+      ) {
         return true;
       }
 
-      // Transliterated search for Marathi/Hindi names
+      // Transliteration matching: if user typed Latin (e.g., 'Damodar'), transliterate Marathi name and compare
       try {
-        const transliteratedName = tr(name).toLowerCase();
-        if (transliteratedName.includes(searchTerm)) {
+        const translitNameMar = (tr(nameMar) || '').toLowerCase();
+        const translitMarSurname = (tr(marathiSurname) || '').toLowerCase();
+
+        if (translitNameMar.includes(searchTerm) || translitMarSurname.includes(searchTerm)) {
           return true;
         }
-      } catch (error) {
-        console.log('Transliteration error:', error);
+
+        // Also transliterate the English name (defensive) and compare
+        const translitNameEng = (tr(nameEng) || '').toLowerCase();
+        if (translitNameEng.includes(searchTerm)) return true;
+      } catch (err) {
+        // ignore transliteration errors
+      }
+
+      // If user typed Devanagari characters, prefer Marathi fields but still check transliteration
+      if (isDevanagari) {
+        if (nameMarLower.includes(searchTerm) || marathiSurnameLower.includes(searchTerm)) return true;
       }
 
       return false;
     });
   };
 
-  // 🔸 Extract surname from full name
-  const extractSurname = (fullName) => {
-    if (!fullName) return '';
-    
-    // Split name by spaces and get the first part (surname)
+  // 🔸 Extract surname from either voter object (preferred) or name string
+  const extractSurname = (voterObjOrName) => {
+    if (!voterObjOrName) return '';
+
+    // If an object is passed, prefer explicit surname fields
+    if (typeof voterObjOrName === 'object') {
+      return (
+        voterObjOrName.marathi_surname ||
+        voterObjOrName.english_surname ||
+        extractSurname(voterObjOrName.name || '')
+      );
+    }
+
+    const fullName = String(voterObjOrName);
     const nameParts = fullName.trim().split(/\s+/);
     return nameParts.length > 0 ? nameParts[0] : '';
   };
 
-  // 🔸 Get current voter's surname
+  // 🔸 Get current voter's surname (prefer explicit surname fields)
   const currentVoterSurname = useMemo(() => {
-    return extractSurname(voterData?.name || voter?.name);
+    return extractSurname(voterData || voter || {});
   }, [voterData, voter]);
 
   // 🔸 Load pending offline writes
@@ -227,17 +262,28 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
         filtered = searchVoters(availableVoters, modalQuery);
       }
 
-      // Sort: same surname voters first, then others
+      // Sort: same full name first (exact match), then same surname, then alphabetical
       const sortedVoters = [...filtered].sort((a, b) => {
-        const aSurname = extractSurname(a.name);
-        const bSurname = extractSurname(b.name);
-        
+        const aFull = (a.voterNameEng || a.name || '').toString().toLowerCase();
+        const bFull = (b.voterNameEng || b.name || '').toString().toLowerCase();
+        const currentFull = (voterData?.voterNameEng || voterData?.name || '').toString().toLowerCase();
+
+        const aSameFull = currentFull && aFull === currentFull;
+        const bSameFull = currentFull && bFull === currentFull;
+        if (aSameFull && !bSameFull) return -1;
+        if (!aSameFull && bSameFull) return 1;
+
+        const aSurname = extractSurname(a);
+        const bSurname = extractSurname(b);
+
         const aHasSameSurname = aSurname === currentVoterSurname;
         const bHasSameSurname = bSurname === currentVoterSurname;
-        
+
         if (aHasSameSurname && !bHasSameSurname) return -1;
         if (!aHasSameSurname && bHasSameSurname) return 1;
-        return 0; // Keep original order if both have same surname status
+
+        // Alphabetical fallback
+        return aFull.localeCompare(bFull);
       });
 
       setFilteredVoters(sortedVoters);
@@ -845,8 +891,8 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
       {voters.length === 0 && (
         <div className="text-center text-gray-500 py-8 border-2 border-dashed border-gray-300 rounded-lg">
           <FiUsers className="text-4xl text-gray-400 mx-auto mb-3" />
-          <p>No family members added yet</p>
-          <p className="text-sm mt-1">Click "Add Family" to start building the family tree</p>
+          <p><TranslatedText>No family members added yet</TranslatedText></p>
+          <p className="text-sm mt-1"><TranslatedText>Click "Add Family" to start building the family tree</TranslatedText></p>
         </div>
       )}
     </div>
@@ -860,7 +906,7 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-yellow-500 rounded-full animate-pulse"></div>
             <span className="text-sm text-yellow-800 font-medium">
-              {pendingSyncItems.length} pending changes
+              <TranslatedText>{pendingSyncItems.length} pending changes</TranslatedText>
             </span>
           </div>
           <button
@@ -868,7 +914,7 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
             disabled={loadingOperation}
             className="bg-yellow-500 text-white px-4 py-2 rounded-lg text-sm hover:bg-yellow-600 disabled:opacity-50 transition-colors"
           >
-            {loadingOperation ? 'Syncing...' : 'Sync Now'}
+            <TranslatedText>{loadingOperation ? 'Syncing...' : 'Sync Now'}</TranslatedText>
           </button>
         </div>
       )}
@@ -882,7 +928,7 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
                 <TranslatedText>Family Management</TranslatedText>
               </h2>
               <p className="text-gray-600 mt-1">
-                Manage family members for {voterData?.name || 'current voter'}
+                <TranslatedText>Manage family members for</TranslatedText> <span className="font-medium">{voterData?.name || <TranslatedText>current voter</TranslatedText>}</span>
               </p>
             </div>
           </div>
@@ -893,19 +939,19 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
                 <button
                   onClick={printFamilyViaBluetooth}
                   disabled={printing}
+                  title={printing ? 'Printing...' : 'Print Family'}
                   className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-3 rounded-xl transition-all duration-300 disabled:opacity-50 shadow-lg hover:shadow-xl transform hover:scale-105"
                 >
                   <FiPrinter className="text-lg" />
-                  {/* <span className="font-semibold">
-                    {printing ? 'Printing...' : 'Print Family'}
-                  </span> */}
+                  <span className="font-semibold"><TranslatedText>{printing ? 'Printing...' : 'Print Family'}</TranslatedText></span>
                 </button>
                 <button
                   onClick={handleWhatsAppShare}
+                  title="Share via WhatsApp"
                   className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-4 py-3 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
                 >
                   <FaWhatsapp className="text-lg" />
-                  {/* <span className="font-semibold">Share via WhatsApp</span> */}
+                  <span className="font-semibold"><TranslatedText>Share via WhatsApp</TranslatedText></span>
                 </button>
               </>
             )}
@@ -914,7 +960,7 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
               className="flex items-center gap-2 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white px-4 py-3 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
             >
               <FiPlus className="text-lg" />
-              {/* <span className="font-semibold">+</span> */}
+              <span className="font-semibold"><TranslatedText>Add Family</TranslatedText></span>
             </button>
           </div>
         </div>
@@ -924,7 +970,7 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
       <div className="bg-white rounded-xl mt-5">
         <div className="flex flex-col items-center justify-between mb-4">
           <h3 className="text-xl font-semibold text-gray-900">
-            Family Members ({familyMembers.length})
+            <TranslatedText>Family Members</TranslatedText> ({familyMembers.length})
           </h3>
           {familyMembers.length > 0 && (
             <div className="text-sm text-gray-500">
@@ -950,10 +996,10 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
           <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
             <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gradient-to-r from-orange-50 to-red-50">
               <div>
-                <p className="text-gray-600 mt-1">
+                <p className="text-gray-800 mt-1">
                   {currentVoterSurname && (
                     <span className=" text-orange-600 font-medium">
-                      ({sameSurnameCount} with same surname "{currentVoterSurname}" shown first)
+                      <TranslatedText>({sameSurnameCount} with same surname "{currentVoterSurname}" shown first)</TranslatedText>
                     </span>
                   )}
                 </p>
@@ -967,21 +1013,32 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
             </div>
 
             <div className="p-4 border-b relative bg-white">
+              <label className="sr-only"><TranslatedText>Search</TranslatedText></label>
               <div className="relative">
-                <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg" />
+                <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-lg" aria-hidden />
                 <input
                   type="text"
                   value={modalQuery}
                   onChange={(e) => setModalQuery(e.target.value)}
-                  placeholder="Search by name (English or regional language), voter ID, or serial number..."
-                  className="w-full pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-300"
+                  placeholder="Search Marathi / English name, voter ID, or serial number..."
+                  className="w-full pl-10 pr-10 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all duration-300"
+                  aria-label="Search Marathi / English name, voter ID, or serial number"
                 />
+                {modalQuery && (
+                  <button
+                    onClick={() => setModalQuery('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 p-1 rounded"
+                    aria-label="Clear search"
+                    title="Clear search"
+                  >
+                    <FiX />
+                  </button>
+                )}
               </div>
-              {modalQuery && (
-                <div className="text-xs text-gray-500 mt-2">
-                  🔍 Voters Name, Voter IDs, Serial Numbers, and transliterated regional names
-                </div>
-              )}
+              {/* <div className="text-xs text-gray-500 mt-2 flex items-center gap-2">
+                <span>🔍</span>
+                <TranslatedText>Search will look in Marathi and English names, voter IDs, English transliterations and surname fields.</TranslatedText>
+              </div> */}
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3 bg-gray-50">
@@ -1038,10 +1095,9 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
               ) : (
                 <div className="text-center text-gray-500 py-12">
                   <FiSearch className="text-5xl text-gray-400 mx-auto mb-4" />
-                  <p className="text-lg font-medium">No voters found</p>
+                  <p className="text-lg font-medium"><TranslatedText>No voters found</TranslatedText></p>
                   <p className="text-sm mt-2 max-w-md mx-auto">
-                    Try adjusting your search terms. You can search in English or regional languages - 
-                    the system will automatically transliterate your search.
+                    <TranslatedText>Try adjusting your search terms. You can search in English or regional languages - the system will automatically transliterate your search.</TranslatedText>
                   </p>
                 </div>
               )}
@@ -1087,7 +1143,7 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
                 <FaWhatsapp className="text-2xl text-green-600" />
               </div>
               <h3 className="text-lg font-semibold text-gray-800">
-                Enter WhatsApp Number
+                <TranslatedText>Enter WhatsApp Number</TranslatedText>
               </h3>
             </div>
             <p className="text-sm text-gray-600 mb-4">
@@ -1114,14 +1170,14 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
                 }}
                 className="px-4 py-2 border-2 border-gray-300 rounded-xl hover:bg-gray-50 transition-colors font-medium"
               >
-                Cancel
+                <TranslatedText>Cancel</TranslatedText>
               </button>
               <button
                 onClick={confirmWhatsAppShare}
                 disabled={!validatePhoneNumber(whatsAppNumber)}
                 className="px-4 py-2 bg-green-500 text-white rounded-xl hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 font-medium shadow-lg hover:shadow-xl"
               >
-                Send & Save
+                <TranslatedText>Send & Save</TranslatedText>
               </button>
             </div>
           </div>

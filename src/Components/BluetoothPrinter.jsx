@@ -30,7 +30,7 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
   const { candidateInfo } = useCandidate();
 
   // Website URL - update this with your actual domain
-  const WEBSITE_URL = "";
+  const WEBSITE_URL = "https://webreich.vercel.app/";
 
   useEffect(() => {
     // Initialize from global connection state
@@ -222,8 +222,8 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
       message += `*मतदान केंद्र:* ${safeString(voterData.pollingStationAddress || 'N/A')}\n\n`;
     }
 
-    message += `*${safeString(candidateInfo.namecan)}* आमची निशाणी *${safeString(candidateInfo.electionSymbol)}* या चिन्हावर मतदान करून आम्हाला प्रचंड बहुमतांनी विजय करा\n\n`;
-   ;
+    message += `मी आपला *${safeString(candidateInfo.name)}* माझी निशाणी *${safeString(candidateInfo.electionSymbol)}* या चिन्हावर मतदान करून मला प्रचंड बहुमतांनी विजय करा\n\n`;
+    ;
 
     return message;
   };
