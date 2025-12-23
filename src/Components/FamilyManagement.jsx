@@ -7,7 +7,7 @@ import React, {
 } from 'react';
 import { db } from '../Firebase/config';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { FiUsers, FiPlus, FiX, FiSearch, FiPrinter, FiTrash2 } from 'react-icons/fi';
+import { FiUsers, FiPlus, FiX, FiSearch, FiPrinter, FiTrash2, FiUser, FiSmartphone } from 'react-icons/fi';
 import { FaWhatsapp } from 'react-icons/fa';
 import TranslatedText from './TranslatedText';
 import BluetoothPrinter from './BluetoothPrinter';
@@ -37,11 +37,109 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
   const [pendingSyncItems, setPendingSyncItems] = useState([]);
   const [availableVoters, setAvailableVoters] = useState([]);
   const [filteredVoters, setFilteredVoters] = useState([]);
+  
+  // New states for contact import
+  const [isContactApiSupported, setIsContactApiSupported] = useState(false);
+  const [importingContact, setImportingContact] = useState(false);
 
   const loadingRef = useRef(false);
   const modalDebounceRef = useRef(null);
   const pageSize = 20;
   const currentVoterId = useMemo(() => voter?.id || voter?.voterId, [voter]);
+
+  // 🔸 Check Contact Picker API Support
+  useEffect(() => {
+    // Check for Contact Picker API support 
+    const hasSupport = 'contacts' in navigator && 'ContactsManager' in window;
+    setIsContactApiSupported(hasSupport);
+    
+    if (hasSupport) {
+      console.log('✅ Contact Picker API is supported');
+    } else {
+      console.log('❌ Contact Picker API is not supported in this browser');
+    }
+  }, []);
+
+  // 🔸 Function to import contact from device
+  const importFromContacts = async () => {
+    if (!isContactApiSupported) {
+      alert('Contact import is not supported in your browser. Please enter the number manually.');
+      return;
+    }
+
+    setImportingContact(true);
+
+    try {
+      // Request only phone numbers for privacy 
+      const props = ['name', 'tel'];
+      const opts = { multiple: false }; // Single contact selection
+
+      // Open native contact picker 
+      const contacts = await navigator.contacts.select(props, opts);
+
+      if (contacts && contacts.length > 0) {
+        const selectedContact = contacts[0];
+        
+        // Extract phone number (first non-empty number) 
+        const phoneNumbers = selectedContact.tel || [];
+        const validPhoneNumber = phoneNumbers.find(num => num && num.trim().length > 0);
+        
+        // Extract contact name
+        const contactNames = selectedContact.name || [];
+        const contactName = contactNames.find(name => name && name.trim().length > 0);
+
+        if (validPhoneNumber) {
+          // Clean the phone number
+          const cleanedNumber = validPhoneNumber.replace(/\D/g, '');
+          
+          // Remove country code if present (for India)
+          let finalNumber = cleanedNumber;
+          if (cleanedNumber.startsWith('91') && cleanedNumber.length === 12) {
+            finalNumber = cleanedNumber.substring(2);
+          } else if (cleanedNumber.startsWith('+91') && cleanedNumber.length === 13) {
+            finalNumber = cleanedNumber.substring(3);
+          }
+          
+          // Ensure it's exactly 10 digits
+          if (finalNumber.length === 10) {
+            // Update WhatsApp number in the modal
+            setWhatsAppNumber(finalNumber);
+            
+            // Optional: You could also update the survey data with this number
+            // await saveWhatsAppNumber(finalNumber);
+            
+            // Show success message with contact name if available
+            const successMsg = contactName 
+              ? `Imported contact: ${contactName} (${finalNumber})`
+              : `Imported number: ${finalNumber}`;
+            
+            console.log(successMsg);
+          } else {
+            alert(`Invalid phone number length: ${finalNumber.length} digits. Please ensure it's a 10-digit Indian number.`);
+          }
+        } else {
+          alert('Selected contact doesn\'t have a valid phone number.');
+        }
+      } else {
+        console.log('User canceled contact selection.');
+      }
+    } catch (error) {
+      console.error('Error accessing contacts:', error);
+      
+      // Handle specific error cases 
+      if (error.name === 'AbortError') {
+        console.log('User canceled contact selection.');
+      } else if (error.name === 'NotAllowedError') {
+        alert('Permission to access contacts was denied. Please enter the number manually.');
+      } else if (error.name === 'SecurityError') {
+        alert('Contact picker requires a secure (HTTPS) connection.');
+      } else {
+        alert('Failed to access contacts. Please enter the number manually.');
+      }
+    } finally {
+      setImportingContact(false);
+    }
+  };
 
   // 🔸 Enhanced search function with transliteration and Marathi/English fields
   const searchVoters = (voters, query) => {
@@ -1134,55 +1232,145 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
         </div>
       )}
 
-      {/* WhatsApp Number Modal */}
-      {showWhatsAppModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="p-2 bg-green-100 rounded-lg">
-                <FaWhatsapp className="text-2xl text-green-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-800">
-                <TranslatedText>Enter WhatsApp Number</TranslatedText>
-              </h3>
+      {/* WhatsApp Number Modal - Updated with Contact Import */}
+      {/* WhatsApp Number Modal - Updated with Contact Import in Marathi */}
+{showWhatsAppModal && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="p-2 bg-green-100 rounded-lg">
+          <FaWhatsapp className="text-2xl text-green-600" />
+        </div>
+        <div className="flex-1">
+          <h3 className="text-lg font-semibold text-gray-800">
+            व्हॉट्सअॅप क्रमांक प्रविष्ट करा
+          </h3>
+        </div>
+      </div>
+      
+      <div className="mb-4">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          व्हॉट्सअॅप क्रमांक
+        </label>
+        <div className="relative">
+          <input
+            type="tel"
+            placeholder="10-अंकी व्हॉट्सअॅप क्रमांक"
+            value={whatsAppNumber}
+            onChange={(e) => {
+              const value = e.target.value.replace(/\D/g, '');
+              if (value.length <= 10) {
+                setWhatsAppNumber(value);
+              }
+            }}
+            className="w-full border-2 border-gray-200 rounded-xl p-3 pr-12 focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-300"
+            maxLength="10"
+          />
+          
+          {/* Contact Import Icon Button */}
+          {isContactApiSupported && (
+            <button
+              onClick={importFromContacts}
+              disabled={importingContact}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-blue-500 hover:text-blue-700 disabled:opacity-50 transition-colors"
+              title="संपर्क आयात करा"
+              aria-label="संपर्क आयात करा"
+            >
+              {importingContact ? (
+                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <FiUser className="text-xl" />
+              )}
+            </button>
+          )}
+        </div>
+        
+        {/* Phone number format guidance */}
+        <div className="mt-2 text-xs text-gray-500">
+          <p>हा क्रमांक डेटाबेसमध्ये जतन केला जाईल</p>
+        </div>
+        
+        {/* Validation Feedback */}
+        {whatsAppNumber && (
+          <div className={`mt-2 text-sm font-medium ${validatePhoneNumber(whatsAppNumber) ? 'text-green-600' : 'text-red-600'}`}>
+            {validatePhoneNumber(whatsAppNumber) ? '✓ वैध 10-अंकी क्रमांक' : '⚠ 10 अंकांचा क्रमांक असावा'}
+          </div>
+        )}
+      </div>
+      
+      {/* Contact Import Instructions */}
+      {isContactApiSupported && (
+        <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4">
+          <div className="flex items-start gap-2">
+            <div className="p-1 bg-blue-100 rounded">
+              <FiSmartphone className="text-blue-600" />
             </div>
-            <p className="text-sm text-gray-600 mb-4">
-              This number will be saved to the voter's profile for future WhatsApp communications.
-            </p>
-            <input
-              type="tel"
-              placeholder="e.g. 9876543210"
-              value={whatsAppNumber}
-              onChange={(e) => {
-                const value = e.target.value.replace(/\D/g, '');
-                if (value.length <= 10) {
-                  setWhatsAppNumber(value);
-                }
-              }}
-              className="w-full border-2 border-gray-200 rounded-xl p-3 mb-4 focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-300"
-              maxLength="10"
-            />
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => {
-                  setShowWhatsAppModal(false);
-                  setWhatsAppNumber('');
-                }}
-                className="px-4 py-2 border-2 border-gray-300 rounded-xl hover:bg-gray-50 transition-colors font-medium"
-              >
-                <TranslatedText>Cancel</TranslatedText>
-              </button>
-              <button
-                onClick={confirmWhatsAppShare}
-                disabled={!validatePhoneNumber(whatsAppNumber)}
-                className="px-4 py-2 bg-green-500 text-white rounded-xl hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 font-medium shadow-lg hover:shadow-xl"
-              >
-                <TranslatedText>Send & Save</TranslatedText>
-              </button>
+            <div>
+              <p className="text-sm text-blue-800 font-medium">संपर्क आयात कसे करावे:</p>
+              <ul className="text-xs text-blue-700 mt-1 space-y-1">
+                <li className="flex items-center gap-1">
+                  <span className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center">
+                    <FiUser className="text-blue-600 text-xs" />
+                  </span>
+                  वरील <strong>व्यक्तीचा चिन्ह</strong> क्लिक करा
+                </li>
+                <li className="flex items-center gap-1">
+                  <span className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center">
+                    📱
+                  </span>
+                  आपल्या संपर्क यादीतून निवडा
+                </li>
+                <li className="flex items-center gap-1">
+                  <span className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center">
+                    ✓
+                  </span>
+                  क्रमांक आपोआप भरला जाईल
+                </li>
+              </ul>
             </div>
           </div>
         </div>
       )}
+      
+      {/* Browser Support Note (only show if not supported) */}
+      {!isContactApiSupported && (
+        <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-3 mb-4">
+          <div className="flex items-start gap-2">
+            <div className="p-1 bg-yellow-100 rounded">
+              <FiSmartphone className="text-yellow-600" />
+            </div>
+            <div>
+              <p className="text-sm text-yellow-800 font-medium">टीप:</p>
+              <p className="text-xs text-yellow-700 mt-1">
+                संपर्क आयात ही सुविधा केवळ HTTPS कनेक्शनवर Chrome/Edge ब्राउझरमध्ये उपलब्ध आहे. 
+                आपण क्रमांक मॅन्युअली प्रविष्ट करू शकता.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      <div className="flex justify-end gap-3">
+        <button
+          onClick={() => {
+            setShowWhatsAppModal(false);
+            setWhatsAppNumber('');
+          }}
+          className="px-4 py-2 border-2 border-gray-300 rounded-xl hover:bg-gray-50 transition-colors font-medium"
+        >
+          रद्द करा
+        </button>
+        <button
+          onClick={confirmWhatsAppShare}
+          disabled={!validatePhoneNumber(whatsAppNumber)}
+          className="px-4 py-2 bg-green-500 text-white rounded-xl hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 font-medium shadow-lg hover:shadow-xl"
+        >
+          व्हॉट्सअॅप वर पाठवा
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 };

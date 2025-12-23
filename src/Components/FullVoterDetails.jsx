@@ -41,6 +41,10 @@ const FullVoterDetails = () => {
     remarks: ''
   });
 
+  // New states for contact import
+  const [isContactApiSupported, setIsContactApiSupported] = useState(false);
+  const [importingContact, setImportingContact] = useState(false);
+
   // Use VoterContext for offline data
   const { voters: allVotersFromContext, loading: contextLoading, initialized } = useContext(VoterContext);
 
@@ -54,6 +58,87 @@ const FullVoterDetails = () => {
   const [dynamic, setDynamic] = useState({}); // holds hasVoted, supportStatus, etc.
 
   const { candidateInfo } = useCandidate();
+
+  // Check Contact Picker API Support
+  useEffect(() => {
+    const hasSupport = 'contacts' in navigator && 'ContactsManager' in window;
+    setIsContactApiSupported(hasSupport);
+    
+    if (hasSupport) {
+      console.log('✅ Contact Picker API is supported');
+    } else {
+      console.log('❌ Contact Picker API is not supported');
+    }
+  }, []);
+
+  // 🔸 Function to import contact from device
+  const importFromContacts = async () => {
+    if (!isContactApiSupported) {
+      alert('Contact import is not supported in your browser. Please enter the number manually.');
+      return;
+    }
+
+    setImportingContact(true);
+
+    try {
+      const props = ['name', 'tel'];
+      const opts = { multiple: false };
+
+      const contacts = await navigator.contacts.select(props, opts);
+
+      if (contacts && contacts.length > 0) {
+        const selectedContact = contacts[0];
+        const phoneNumbers = selectedContact.tel || [];
+        const validPhoneNumber = phoneNumbers.find(num => num && num.trim().length > 0);
+
+        if (validPhoneNumber) {
+          const cleanedNumber = validPhoneNumber.replace(/\D/g, '');
+          
+          // Remove country code if present
+          let finalNumber = cleanedNumber;
+          if (cleanedNumber.startsWith('91') && cleanedNumber.length === 12) {
+            finalNumber = cleanedNumber.substring(2);
+          } else if (cleanedNumber.startsWith('+91') && cleanedNumber.length === 13) {
+            finalNumber = cleanedNumber.substring(3);
+          }
+          
+          // Ensure it's exactly 10 digits
+          if (finalNumber.length === 10) {
+            // Update the surveyData state with imported number
+            setSurveyData(prev => ({
+              ...prev,
+              whatsapp: finalNumber
+            }));
+            
+            // Optional: You can also save it immediately
+            // const success = await saveSurveyField('whatsapp', finalNumber);
+            
+            console.log('✅ Imported contact number:', finalNumber);
+          } else {
+            alert(`Invalid phone number length: ${finalNumber.length} digits. Please ensure it's a 10-digit Indian number.`);
+          }
+        } else {
+          alert('Selected contact doesn\'t have a valid phone number.');
+        }
+      } else {
+        console.log('User canceled contact selection.');
+      }
+    } catch (error) {
+      console.error('Error accessing contacts:', error);
+      
+      if (error.name === 'AbortError') {
+        console.log('User canceled contact selection.');
+      } else if (error.name === 'NotAllowedError') {
+        alert('Permission to access contacts was denied. Please enter the number manually.');
+      } else if (error.name === 'SecurityError') {
+        alert('Contact picker requires a secure (HTTPS) connection.');
+      } else {
+        alert('Failed to access contacts. Please enter the number manually.');
+      }
+    } finally {
+      setImportingContact(false);
+    }
+  };
 
   useEffect(() => {
     if (voter) {
@@ -535,11 +620,36 @@ const FullVoterDetails = () => {
                     label="Age & Gender"
                     value={`${voter.age} | ${voter.gender}`}
                   />
-                  {/* ✅ WhatsApp Number Display (Readonly) */}
-                  <DetailRow
-                    label="WhatsApp Number"
-                    value={surveyData.whatsapp || 'Not available'}
-                  />
+                  
+                  {/* ✅ WhatsApp Number Display with Contact Import */}
+                  <div className="flex justify-between items-center border-b border-gray-200 pb-3">
+                    <span className="font-medium text-gray-700 text-sm">
+                      <TranslatedText>WhatsApp Number</TranslatedText>
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-900 text-sm">
+                        {surveyData.whatsapp || 'Not available'}
+                      </span>
+                      
+                      {/* Contact Import Icon */}
+                      {isContactApiSupported && (
+                        <button
+                          onClick={importFromContacts}
+                          disabled={importingContact}
+                          className="p-2 text-blue-500 hover:text-blue-700 disabled:opacity-50 transition-colors"
+                          title="Import from contacts"
+                          aria-label="Import from contacts"
+                        >
+                          {importingContact ? (
+                            <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                          ) : (
+                            <FiUser className="text-md" />
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  
                   <DetailRow
                     label="Phone Number"
                     value={surveyData.phone || 'Not available'}
@@ -568,6 +678,23 @@ const FullVoterDetails = () => {
                   />
                 </div>
 
+                {/* Browser Support Note */}
+                {!isContactApiSupported && (
+                  <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-3 mb-4">
+                    <div className="flex items-start gap-2">
+                      <div className="p-1 bg-yellow-100 rounded">
+                        <span className="text-yellow-600">📱</span>
+                      </div>
+                      <div>
+                        <p className="text-sm text-yellow-800 font-medium">Note:</p>
+                        <p className="text-xs text-yellow-700 mt-1">
+                          Contact import requires HTTPS connection on Chrome/Edge browser. 
+                          You can edit WhatsApp number in the Survey tab.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* 🟢 Dynamic Voter Controls (Offline-Synced) */}
                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6 p-4 bg-orange-50 rounded-xl border border-orange-200">
@@ -618,8 +745,6 @@ const FullVoterDetails = () => {
                   candidateInfo={candidateInfo}
                 />
               </div>
-
-
             )}
 
             {/* Family Tab */}
