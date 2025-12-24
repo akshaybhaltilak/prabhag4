@@ -8,43 +8,59 @@ import React, {
 import Sanscript from "sanscript";
 import localforage from "localforage";
 import * as XLSX from "xlsx";
-import { FiLoader, FiDownload } from "react-icons/fi";
+import { FiLoader, FiDownload, FiChevronLeft, FiChevronRight, FiArrowLeft } from "react-icons/fi";
 import { useCandidate } from "../Context/CandidateContext";
+import { Link } from "react-router-dom";
+import TranslatedText from "./TranslatedText";
 
 const VoterList = lazy(() => import("./VoterList"));
 const SearchBar = lazy(() => import("./SearchBar"));
 
-/* ================= UTILITIES ================= */
+/* ---------------- NORMALIZE ---------------- */
 const normalize = (str = "") =>
   str
-    .toString()
     .toLowerCase()
+    .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\s]/gi, " ")
+    .replace(/[^a-z0-9\u0900-\u097F\s]/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
 
-/* Marathi + English index */
-const buildSearchIndex = (voter) => {
-  let latinName = "";
+/* ---------------- LANGUAGE DETECTION ---------------- */
+const isMarathi = (text = "") => /[\u0900-\u097F]/.test(text);
+
+/* ---------------- BUILD SEARCH INDEX ---------------- */
+const buildSearchIndex = (v) => {
+  const mrName = v.name || "";
+  const engName = v.voterNameEng || "";
+
+  let mrToEng = "";
+  let engToMr = "";
+
   try {
-    latinName = Sanscript.t(voter.name || "", "devanagari", "itrans");
-  } catch {}
+    if (mrName) {
+      mrToEng = Sanscript.t(mrName, "devanagari", "itrans");
+    }
+    if (engName) {
+      engToMr = Sanscript.t(engName, "itrans", "devanagari");
+    }
+  } catch { }
 
   return normalize(`
-    ${voter.name}
-    ${latinName}
-    ${voter.voterId}
-    ${voter.boothNumber}
-    ${voter.houseNumber}
-    ${voter.address}
-    ${voter.pollingStationAddress}
-    ${voter.village}
-    ${voter.prabhag}
+    ${mrName}
+    ${engName}
+    ${mrToEng}
+    ${engToMr}
+    ${v.voterId}
+    ${v.boothNumber}
+    ${v.address}
+    ${v.pollingStationAddress}
+    ${v.village}
+    ${v.fatherName}
+    ${v.surname}
   `);
 };
 
-/* ================= COMPONENT ================= */
 export default function Dashboard() {
   const { candidateInfo } = useCandidate();
 
@@ -52,205 +68,247 @@ export default function Dashboard() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
 
-  /* Export modal */
+  const [page, setPage] = useState(1);
+  const pageSize = 50;
+
+  /* ---------------- EXPORT MODAL ---------------- */
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportPassword, setExportPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
-  const [exporting, setExporting] = useState(false);
 
-  /* ================= LOAD DATA (FAST) ================= */
+  /* ---------------- LOAD DATA ---------------- */
   useEffect(() => {
-    const loadVoters = async () => {
-      try {
-        const cached = await localforage.getItem("voters_indexed_v1");
-        if (cached?.length) {
-          setAllVoters(cached);
-          setLoading(false);
-          return;
-        }
+    const load = async () => {
+      setLoading(true);
 
-        const res = await fetch("/voter.json");
-        const rawData = await res.json();
-
-        /* Build index ONCE */
-        const indexedData = rawData.map(v => ({
-          ...v,
-          _s: buildSearchIndex(v),
-        }));
-
-        setAllVoters(indexedData);
-        localforage.setItem("voters_indexed_v1", indexedData);
-      } catch (err) {
-        console.error("Failed to load voters:", err);
-      } finally {
+      const cached = await localforage.getItem("voters_indexed_v2");
+      if (cached?.length) {
+        setAllVoters(cached);
         setLoading(false);
+        return;
       }
+
+      const res = await fetch("/voter.json");
+      const raw = await res.json();
+
+      requestIdleCallback(async () => {
+        const indexed = raw.map(v => ({
+          ...v,
+          _search: buildSearchIndex(v),
+        }));
+        await localforage.setItem("voters_indexed_v2", indexed);
+        setAllVoters(indexed);
+        setLoading(false);
+      });
     };
 
-    loadVoters();
+    load();
   }, []);
 
-  /* ================= SEARCH (VERY FAST) ================= */
-  const filteredVoters = useMemo(() => {
-    if (!search) return allVoters.slice(0, 50);
+  /* ---------------- SEARCH ---------------- */
+  const filteredAll = useMemo(() => {
+    if (!search) return allVoters;
 
-    const terms = normalize(search).split(" ");
-    const results = allVoters.filter(v =>
-      terms.every(t => v._s?.includes(t))
+    const normalizedSearch = normalize(search);
+    const terms = normalizedSearch.split(" ").filter(Boolean);
+
+    return allVoters.filter(v =>
+      terms.every(t => v._search?.includes(t))
     );
-
-    return results.slice(0, 50);
   }, [search, allVoters]);
 
-  /* ================= EXCEL EXPORT ================= */
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+
+  const totalFiltered = filteredAll.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+
+  // Ensure current page is within bounds when filtered result changes
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [totalPages, page]);
+
+  const paginated = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredAll.slice(start, start + pageSize);
+  }, [filteredAll, page]);
+
+  /* ---------------- EXPORT ---------------- */
   const exportToExcel = (rows) => {
     if (!rows.length) return;
 
-    const sheetData = rows.map((voter, index) => {
-      const survey = voter.survey || {};
-      const familyMembers = voter.familyMembers || {};
-
-      return {
-        "Serial Number": voter.serialNumber || index + 1,
-        "Voter ID": voter.voterId || "",
-        "Name": voter.name || "",
-        "Age": voter.age || "",
-        "Gender": voter.gender || "",
-        "Booth Number": voter.boothNumber || "",
-        "Polling Station": voter.pollingStationAddress || "",
-        "Address": survey.address || voter.address || "",
-        "House Number": voter.houseNumber || "",
-        "Phone": survey.mobile || voter.phone || "",
-        "Has Voted": voter.hasVoted || voter.voted ? "Yes" : "No",
-        "Family Members Count": Object.keys(familyMembers).length,
-        "Family Members Details":
-          Object.values(familyMembers).join("; ") || "",
-        "Family Income": survey.familyIncome || "",
-        "Education": survey.education || "",
-        "Occupation": survey.occupation || "",
-        "Caste": survey.caste || "",
-        "Political Affiliation": survey.politicalAffiliation || "",
-        "Issues": survey.issues || "",
-        "Support Status": voter.supportStatus || "",
-        "Assigned Karyakarta": voter.assignedKaryakarta || "",
-        "Village": voter.village || "",
-        "Prabhag": voter.prabhag || "",
-        "Surname": voter.surname || "",
-        "Father Name": voter.fatherName || "",
-        "Yadi Bhag Address": voter.yadiBhagAddress || "",
-        "Created At": voter.createdAt || "",
-        "Updated At": voter.updatedAt || "",
-      };
-    });
-
-    const worksheet = XLSX.utils.json_to_sheet(sheetData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Voters");
-
-    XLSX.writeFile(
-      workbook,
-      `Voters_${candidateInfo?.name || "Export"}_${Date.now()}.xlsx`
-    );
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Voters");
+    XLSX.writeFile(wb, `voters_${Date.now()}.xlsx`);
   };
 
   const confirmExport = () => {
-    setPasswordError("");
-
-    if (!candidateInfo?.password) {
-      setPasswordError("Export password not configured");
-      return;
-    }
-
-    if (exportPassword !== candidateInfo.password) {
+    const requiredPassword = 'Jannetaa9881'; // Export password set as requested
+    if (exportPassword !== requiredPassword) {
       setPasswordError("Incorrect password");
       return;
     }
-
-    setExporting(true);
-    exportToExcel(filteredVoters);
-    setExporting(false);
+    exportToExcel(filteredAll);
     setShowExportModal(false);
     setExportPassword("");
   };
 
-  /* ================= LOADER ================= */
+  /* ---------------- LOADER ---------------- */
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50">
-        <FiLoader className="animate-spin text-orange-500 text-2xl" />
-        <span className="ml-3 text-gray-600">Loading voters…</span>
+        <FiLoader className="animate-spin text-orange-500 text-2xl mr-3" />
+        Loading voter database…
       </div>
     );
   }
 
-  /* ================= UI ================= */
+  /* ---------------- UI ---------------- */
   return (
     <div className="min-h-screen bg-gray-50 p-4">
-      <div className="flex gap-3 items-center">
+      <div className="flex mb-3 justify-between gap-3">
+        <div className="flex">
+          <Link to="/">
+            <button
+              className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center hover:bg-gray-200 transition-all"
+            >
+              <FiArrowLeft className="text-gray-600" />
+            </button>
+          </Link>
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">
+              <TranslatedText>Search Voters</TranslatedText>
+            </h1>
+            <p className="text-gray-500 text-sm">
+              <TranslatedText>Search all voters</TranslatedText>
+            </p>
+          </div>
+        </div>
+        <div>
+          <button
+            onClick={() => setShowExportModal(true)}
+            className="z-50 flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-md shadow-lg hover:shadow-xl"
+            title="Export filtered voters"
+          >
+            <FiDownload />
+            <span className="hidden md:inline">Export</span>
+          </button>
+        </div>
+
+      </div>
+
+
+
+      <div className="flex sticky top-18 gap-3 items-center mb-2">
         <SearchBar
-          placeholder="Search Marathi / English name, voter id, booth..."
+          placeholder="Search Marathi किंवा English नाव"
           onSearch={setSearch}
+          className="w-full"
         />
 
-       
+
       </div>
- <button
-          className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded shadow"
-          onClick={() => {
-            setShowExportModal(true);
-            setExportPassword("");
-            setPasswordError("");
-          }}
-        >
-          <FiDownload /> Export Excel
-        </button>
-      <p className="text-xs text-gray-500 mt-2">
-        Showing {filteredVoters.length} of {allVoters.length} voters
+
+      <p className="text-xs text-gray-500 mb-3">
+        Showing {paginated.length} of {totalFiltered} voters
       </p>
 
       <Suspense fallback={<div className="py-6 text-center">Loading list…</div>}>
-        <VoterList voters={filteredVoters} />
+        <VoterList voters={paginated} />
       </Suspense>
 
-      {/* ================= EXPORT MODAL ================= */}
+      {/* Pagination controls (bottom) */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center mt-4 bg-white p-3 rounded-lg border border-gray-200">
+          {/* <div className="flex items-center gap-2 text-sm text-gray-600">
+            <span>Showing {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, totalFiltered)} of {totalFiltered}</span>
+          </div> */}
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(1)}
+              disabled={page === 1}
+              className={`px-3 py-1 rounded ${page === 1 ? 'bg-gray-100 text-gray-400' : 'bg-white hover:bg-gray-50 border'}`}
+            >First</button>
+
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className={`p-2 rounded ${page === 1 ? 'bg-gray-100 text-gray-400' : 'bg-white hover:bg-gray-50 border'}`}
+              aria-label="Previous"
+            >
+              <FiChevronLeft />
+            </button>
+
+            {/* Page numbers window */}
+            {/* {Array.from({ length: Math.min(7, totalPages) }).map((_, idx) => {
+              const half = Math.floor(7 / 2);
+              let start = Math.max(1, page - half);
+              let end = Math.min(totalPages, start + 6);
+              if (end - start < 6) start = Math.max(1, end - 6);
+              const pageNum = start + idx;
+              if (pageNum > end) return null;
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setPage(pageNum)}
+                  className={`px-3 py-1 rounded ${pageNum === page ? 'bg-orange-500 text-white' : 'bg-white hover:bg-gray-50 border'}`}
+                >{pageNum}</button>
+              );
+            })} */}
+
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className={`p-2 rounded ${page === totalPages ? 'bg-gray-100 text-gray-400' : 'bg-white hover:bg-gray-50 border'}`}
+              aria-label="Next"
+            >
+              <FiChevronRight />
+            </button>
+
+            <button
+              onClick={() => setPage(totalPages)}
+              disabled={page === totalPages}
+              className={`px-3 py-1 rounded ${page === totalPages ? 'bg-gray-100 text-gray-400' : 'bg-white hover:bg-gray-50 border'}`}
+            >Last</button>
+          </div>
+        </div>
+      )}
+
+      {/* EXPORT MODAL */}
       {showExportModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md">
-            <h3 className="font-semibold text-lg mb-2">
-              Confirm Excel Export
-            </h3>
-
+          <div className="bg-white p-6 rounded-xl w-full max-w-md">
+            <h3 className="font-semibold mb-3">Confirm Export</h3>
             <input
               type="password"
-              className="w-full border rounded px-3 py-2 mt-3"
-              placeholder="Enter export password"
+              className="w-full border rounded px-3 py-2 mb-2"
+              placeholder="Enter password"
               value={exportPassword}
               onChange={(e) => setExportPassword(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && confirmExport()}
             />
-
             {passwordError && (
-              <p className="text-red-600 text-sm mt-2">{passwordError}</p>
+              <p className="text-red-500 text-sm">{passwordError}</p>
             )}
-
-            <div className="flex justify-end gap-3 mt-5">
-              <button
-                className="px-4 py-2 border rounded"
-                onClick={() => setShowExportModal(false)}
-              >
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setShowExportModal(false)}>
                 Cancel
               </button>
               <button
                 onClick={confirmExport}
-                disabled={exporting}
-                className="px-4 py-2 bg-orange-500 text-white rounded"
+                className="bg-green-500 text-white px-4 py-2 rounded"
               >
-                {exporting ? "Exporting..." : "Confirm Export"}
+                Export
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Floating export button */}
+
     </div>
   );
 }

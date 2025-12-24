@@ -7,7 +7,7 @@ import React, {
 } from 'react';
 import { db } from '../Firebase/config';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { FiUsers, FiPlus, FiX, FiSearch, FiPrinter, FiTrash2, FiUser, FiSmartphone } from 'react-icons/fi';
+import { FiUsers, FiPlus, FiX, FiSearch, FiPrinter, FiTrash2 } from 'react-icons/fi';
 import { FaWhatsapp } from 'react-icons/fa';
 import TranslatedText from './TranslatedText';
 import BluetoothPrinter from './BluetoothPrinter';
@@ -37,109 +37,11 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
   const [pendingSyncItems, setPendingSyncItems] = useState([]);
   const [availableVoters, setAvailableVoters] = useState([]);
   const [filteredVoters, setFilteredVoters] = useState([]);
-  
-  // New states for contact import
-  const [isContactApiSupported, setIsContactApiSupported] = useState(false);
-  const [importingContact, setImportingContact] = useState(false);
 
   const loadingRef = useRef(false);
   const modalDebounceRef = useRef(null);
   const pageSize = 20;
   const currentVoterId = useMemo(() => voter?.id || voter?.voterId, [voter]);
-
-  // 🔸 Check Contact Picker API Support
-  useEffect(() => {
-    // Check for Contact Picker API support 
-    const hasSupport = 'contacts' in navigator && 'ContactsManager' in window;
-    setIsContactApiSupported(hasSupport);
-    
-    if (hasSupport) {
-      console.log('✅ Contact Picker API is supported');
-    } else {
-      console.log('❌ Contact Picker API is not supported in this browser');
-    }
-  }, []);
-
-  // 🔸 Function to import contact from device
-  const importFromContacts = async () => {
-    if (!isContactApiSupported) {
-      alert('Contact import is not supported in your browser. Please enter the number manually.');
-      return;
-    }
-
-    setImportingContact(true);
-
-    try {
-      // Request only phone numbers for privacy 
-      const props = ['name', 'tel'];
-      const opts = { multiple: false }; // Single contact selection
-
-      // Open native contact picker 
-      const contacts = await navigator.contacts.select(props, opts);
-
-      if (contacts && contacts.length > 0) {
-        const selectedContact = contacts[0];
-        
-        // Extract phone number (first non-empty number) 
-        const phoneNumbers = selectedContact.tel || [];
-        const validPhoneNumber = phoneNumbers.find(num => num && num.trim().length > 0);
-        
-        // Extract contact name
-        const contactNames = selectedContact.name || [];
-        const contactName = contactNames.find(name => name && name.trim().length > 0);
-
-        if (validPhoneNumber) {
-          // Clean the phone number
-          const cleanedNumber = validPhoneNumber.replace(/\D/g, '');
-          
-          // Remove country code if present (for India)
-          let finalNumber = cleanedNumber;
-          if (cleanedNumber.startsWith('91') && cleanedNumber.length === 12) {
-            finalNumber = cleanedNumber.substring(2);
-          } else if (cleanedNumber.startsWith('+91') && cleanedNumber.length === 13) {
-            finalNumber = cleanedNumber.substring(3);
-          }
-          
-          // Ensure it's exactly 10 digits
-          if (finalNumber.length === 10) {
-            // Update WhatsApp number in the modal
-            setWhatsAppNumber(finalNumber);
-            
-            // Optional: You could also update the survey data with this number
-            // await saveWhatsAppNumber(finalNumber);
-            
-            // Show success message with contact name if available
-            const successMsg = contactName 
-              ? `Imported contact: ${contactName} (${finalNumber})`
-              : `Imported number: ${finalNumber}`;
-            
-            console.log(successMsg);
-          } else {
-            alert(`Invalid phone number length: ${finalNumber.length} digits. Please ensure it's a 10-digit Indian number.`);
-          }
-        } else {
-          alert('Selected contact doesn\'t have a valid phone number.');
-        }
-      } else {
-        console.log('User canceled contact selection.');
-      }
-    } catch (error) {
-      console.error('Error accessing contacts:', error);
-      
-      // Handle specific error cases 
-      if (error.name === 'AbortError') {
-        console.log('User canceled contact selection.');
-      } else if (error.name === 'NotAllowedError') {
-        alert('Permission to access contacts was denied. Please enter the number manually.');
-      } else if (error.name === 'SecurityError') {
-        alert('Contact picker requires a secure (HTTPS) connection.');
-      } else {
-        alert('Failed to access contacts. Please enter the number manually.');
-      }
-    } finally {
-      setImportingContact(false);
-    }
-  };
 
   // 🔸 Enhanced search function with transliteration and Marathi/English fields
   const searchVoters = (voters, query) => {
@@ -398,7 +300,7 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
   // 🔸 Count voters with same surname
   const sameSurnameCount = useMemo(() => {
     if (!currentVoterSurname) return 0;
-    return availableVoters.filter(v => 
+    return availableVoters.filter(v =>
       extractSurname(v.name) === currentVoterSurname
     ).length;
   }, [availableVoters, currentVoterSurname]);
@@ -667,7 +569,7 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
   // 🔸 Enhanced HTML Print Fallback with Main Voter
   const printFamilyAsHTML = async (familyData) => {
     const printWindow = window.open('', '_blank');
-    
+
     const { mainVoter, familyMembers, candidateInfo, totalMembers, printDate } = familyData;
 
     const htmlContent = `
@@ -969,11 +871,19 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
     <div className="space-y-3">
       {voters.map((member, index) => (
         <div key={member.voterId || member.id} className="bg-white border-t-2 border-gray-300 mt-2 pt-2 flex justify-between items-center">
-          <div className="flex-1">
-            <h4 className="font-semibold text-gray-900"><TranslatedText>{member.name}</TranslatedText></h4>
-            <div className="text-sm text-gray-600 mt-1">
-              <span>Voter ID: {member.voterId}</span>
-              {member.serialNumber && <span className="ml-3">Serial: {member.serialNumber}</span>}
+          <div className='flex flex-col'>
+            <div className="flex ">
+              {member.serialNumber && <span className="mr-1">{member.serialNumber}] </span>}
+              <h4 className="font-semibold text-gray-900">{member.name}</h4>
+              <h4 className="font-semibold text-gray-900">{member.voterNameEng}</h4>
+
+            </div>
+            <div className="flex w-full justify-between text-sm text-gray-700 mt-1">
+              <span>{member.voterId}</span>
+              <div className='ml-3'>
+                <span>{member.age}|</span>
+                <span>{member.gender}</span>
+              </div>
               {member.boothNumber && <span className="ml-3">Booth: {member.boothNumber}</span>}
             </div>
           </div>
@@ -1072,7 +982,7 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
           </h3>
           {familyMembers.length > 0 && (
             <div className="text-sm text-gray-500">
-              Total {familyMembers.length + 1} family members including primary voter
+              <TranslatedText>Total {familyMembers.length + 1} family members including primary voter</TranslatedText>
             </div>
           )}
         </div>
@@ -1091,7 +1001,7 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
       {/* Add Family Modal */}
       {showFamilyModal && (
         <div className="fixed inset-0 p-4 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+          <div className="bg-white rounded-2xl w-full max-w-4xl max-h-full overflow-hidden flex flex-col shadow-2xl">
             <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gradient-to-r from-orange-50 to-red-50">
               <div>
                 <p className="text-gray-800 mt-1">
@@ -1144,46 +1054,38 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
                 paginatedVoters.map((v) => {
                   const voterSurname = extractSurname(v.name);
                   const hasSameSurname = voterSurname === currentVoterSurname;
-                  
+
                   return (
                     <div
                       key={v.voterId}
-                      className={`flex items-center justify-between border-2 rounded-xl p-4 transition-all duration-300 hover:shadow-lg ${
-                        hasSameSurname 
-                          ? 'bg-orange-50 border-orange-100 hover:border-orange-200' 
-                          : 'border-gray-200 hover:border-orange-300 bg-white hover:bg-orange-50'
-                      }`}
+                      className={`flex items-center justify-between border-2 rounded-xl p-4 transition-all duration-300 hover:shadow-lg ${hasSameSurname
+                        ? 'bg-orange-50 border-orange-100 hover:border-orange-200'
+                        : 'border-gray-200 hover:border-orange-300 bg-white hover:bg-orange-50'
+                        }`}
                     >
-                      <div className="flex-1">  
+                      <div className="flex-1">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-gradient-to-r from-orange-400 to-red-400 rounded-full flex items-center justify-center text-white font-bold text-sm">
-                            {v.name?.charAt(0) || '?'}
+                          <div className="w-10 h-10  flex items-center justify-center text-gray-800 font-bold text-sm">
+                            {v.serialNumber && <span><strong>{v.serialNumber}|</strong></span>}
                           </div>
                           <div className="flex-1">
-                            <div className="flex items-center">
+
+                            <div className="flex flex-col">
                               <h4 className="font-bold text-gray-900 text-md">{v.name}</h4>
-                              {/* {hasSameSurname && (
-                                <span className="bg-orange-500 text-white text-xs px-2 py-1 rounded-full font-medium">
-                                  Same Surname
-                                </span>
-                              )} */}
+                              <h4 className="font-bold text-gray-900 text-sm">{v.voterNameEng}</h4>
                             </div>
                             <div className="text-sm text-gray-600 flex flex-wrap gap-3">
-                              <span>Voter ID: <strong>{v.voterId}</strong></span>
-                              {v.serialNumber && <span>Serial: <strong>{v.serialNumber}</strong></span>}
+                              <span>{v.voterId}</span>
+                              <span>{v.age}</span>
+                              <span>{v.gender}</span>
                               {v.boothNumber && <span>Booth: <strong>{v.boothNumber}</strong></span>}
-                              {hasSameSurname && (
-                                <span className="text-orange-600 font-medium">
-                                  Surname: <strong>{voterSurname}</strong>
-                                </span>
-                              )}
                             </div>
                           </div>
                         </div>
                       </div>
                       <button
                         onClick={() => addFamilyMember(v)}
-                        className="bg-gradient-to-r from-orange-500 to-red-500 text-white px-5 py-2 rounded-xl hover:from-orange-600 hover:to-red-600 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 font-semibold"
+                        className="bg-gradient-to-r from-gray-50 to-gray-100 text-orange-500 px-5 py-2 rounded-xl hover:from-gray-100 hover:to-gray-200 transition-all duration-300 hover:shadow-xl transform hover:scale-105 font-semibold"
                       >
                         +
                       </button>
@@ -1232,145 +1134,55 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
         </div>
       )}
 
-      {/* WhatsApp Number Modal - Updated with Contact Import */}
-      {/* WhatsApp Number Modal - Updated with Contact Import in Marathi */}
-{showWhatsAppModal && (
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl">
-      <div className="flex items-center gap-3 mb-4">
-        <div className="p-2 bg-green-100 rounded-lg">
-          <FaWhatsapp className="text-2xl text-green-600" />
-        </div>
-        <div className="flex-1">
-          <h3 className="text-lg font-semibold text-gray-800">
-            व्हॉट्सअॅप क्रमांक प्रविष्ट करा
-          </h3>
-        </div>
-      </div>
-      
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          व्हॉट्सअॅप क्रमांक
-        </label>
-        <div className="relative">
-          <input
-            type="tel"
-            placeholder="10-अंकी व्हॉट्सअॅप क्रमांक"
-            value={whatsAppNumber}
-            onChange={(e) => {
-              const value = e.target.value.replace(/\D/g, '');
-              if (value.length <= 10) {
-                setWhatsAppNumber(value);
-              }
-            }}
-            className="w-full border-2 border-gray-200 rounded-xl p-3 pr-12 focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-300"
-            maxLength="10"
-          />
-          
-          {/* Contact Import Icon Button */}
-          {isContactApiSupported && (
-            <button
-              onClick={importFromContacts}
-              disabled={importingContact}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-blue-500 hover:text-blue-700 disabled:opacity-50 transition-colors"
-              title="संपर्क आयात करा"
-              aria-label="संपर्क आयात करा"
-            >
-              {importingContact ? (
-                <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <FiUser className="text-xl" />
-              )}
-            </button>
-          )}
-        </div>
-        
-        {/* Phone number format guidance */}
-        <div className="mt-2 text-xs text-gray-500">
-          <p>हा क्रमांक डेटाबेसमध्ये जतन केला जाईल</p>
-        </div>
-        
-        {/* Validation Feedback */}
-        {whatsAppNumber && (
-          <div className={`mt-2 text-sm font-medium ${validatePhoneNumber(whatsAppNumber) ? 'text-green-600' : 'text-red-600'}`}>
-            {validatePhoneNumber(whatsAppNumber) ? '✓ वैध 10-अंकी क्रमांक' : '⚠ 10 अंकांचा क्रमांक असावा'}
-          </div>
-        )}
-      </div>
-      
-      {/* Contact Import Instructions */}
-      {isContactApiSupported && (
-        <div className="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4">
-          <div className="flex items-start gap-2">
-            <div className="p-1 bg-blue-100 rounded">
-              <FiSmartphone className="text-blue-600" />
+      {/* WhatsApp Number Modal */}
+      {showWhatsAppModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <FaWhatsapp className="text-2xl text-green-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-800">
+                <TranslatedText>Enter WhatsApp Number</TranslatedText>
+              </h3>
             </div>
-            <div>
-              <p className="text-sm text-blue-800 font-medium">संपर्क आयात कसे करावे:</p>
-              <ul className="text-xs text-blue-700 mt-1 space-y-1">
-                <li className="flex items-center gap-1">
-                  <span className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center">
-                    <FiUser className="text-blue-600 text-xs" />
-                  </span>
-                  वरील <strong>व्यक्तीचा चिन्ह</strong> क्लिक करा
-                </li>
-                <li className="flex items-center gap-1">
-                  <span className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center">
-                    📱
-                  </span>
-                  आपल्या संपर्क यादीतून निवडा
-                </li>
-                <li className="flex items-center gap-1">
-                  <span className="w-5 h-5 bg-blue-100 rounded-full flex items-center justify-center">
-                    ✓
-                  </span>
-                  क्रमांक आपोआप भरला जाईल
-                </li>
-              </ul>
+            <p className="text-sm text-gray-600 mb-4">
+              This number will be saved to the voter's profile for future WhatsApp communications.
+            </p>
+            <input
+              type="tel"
+              placeholder="e.g. 9876543210"
+              value={whatsAppNumber}
+              onChange={(e) => {
+                const value = e.target.value.replace(/\D/g, '');
+                if (value.length <= 10) {
+                  setWhatsAppNumber(value);
+                }
+              }}
+              className="w-full border-2 border-gray-200 rounded-xl p-3 mb-4 focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-300"
+              maxLength="10"
+            />
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowWhatsAppModal(false);
+                  setWhatsAppNumber('');
+                }}
+                className="px-4 py-2 border-2 border-gray-300 rounded-xl hover:bg-gray-50 transition-colors font-medium"
+              >
+                <TranslatedText>Cancel</TranslatedText>
+              </button>
+              <button
+                onClick={confirmWhatsAppShare}
+                disabled={!validatePhoneNumber(whatsAppNumber)}
+                className="px-4 py-2 bg-green-500 text-white rounded-xl hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 font-medium shadow-lg hover:shadow-xl"
+              >
+                <TranslatedText>Send & Save</TranslatedText>
+              </button>
             </div>
           </div>
         </div>
       )}
-      
-      {/* Browser Support Note (only show if not supported) */}
-      {!isContactApiSupported && (
-        <div className="bg-yellow-50 border border-yellow-100 rounded-lg p-3 mb-4">
-          <div className="flex items-start gap-2">
-            <div className="p-1 bg-yellow-100 rounded">
-              <FiSmartphone className="text-yellow-600" />
-            </div>
-            <div>
-              <p className="text-sm text-yellow-800 font-medium">टीप:</p>
-              <p className="text-xs text-yellow-700 mt-1">
-                संपर्क आयात ही सुविधा केवळ HTTPS कनेक्शनवर Chrome/Edge ब्राउझरमध्ये उपलब्ध आहे. 
-                आपण क्रमांक मॅन्युअली प्रविष्ट करू शकता.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-      
-      <div className="flex justify-end gap-3">
-        <button
-          onClick={() => {
-            setShowWhatsAppModal(false);
-            setWhatsAppNumber('');
-          }}
-          className="px-4 py-2 border-2 border-gray-300 rounded-xl hover:bg-gray-50 transition-colors font-medium"
-        >
-          रद्द करा
-        </button>
-        <button
-          onClick={confirmWhatsAppShare}
-          disabled={!validatePhoneNumber(whatsAppNumber)}
-          className="px-4 py-2 bg-green-500 text-white rounded-xl hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 font-medium shadow-lg hover:shadow-xl"
-        >
-          व्हॉट्सअॅप वर पाठवा
-        </button>
-      </div>
-    </div>
-  </div>
-)}
     </div>
   );
 };

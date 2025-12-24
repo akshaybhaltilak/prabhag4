@@ -158,7 +158,7 @@ const BulkSurveyModal = ({ open, onClose, surname, voters = [], onSaved }) => {
                 <TranslatedText>Bulk Update</TranslatedText>
               </h2>
               <p className="text-white/90 text-xs mt-1">
-                <TranslatedText>{voters.length} voters • {surname}</TranslatedText>
+                <TranslatedText>Total: {voters.length} | {surname}</TranslatedText>
               </p>
             </div>
             <button
@@ -257,7 +257,7 @@ const BulkSurveyModal = ({ open, onClose, surname, voters = [], onSaved }) => {
           </div>
 
           {/* 3. Voting Status */}
-          <div className="space-y-2">
+          {/* <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-700">
               <TranslatedText>3. Voting Status</TranslatedText>
             </label>
@@ -275,7 +275,7 @@ const BulkSurveyModal = ({ open, onClose, surname, voters = [], onSaved }) => {
                 <TranslatedText>Not Voted</TranslatedText>
               </button>
             </div>
-          </div>
+          </div> */}
 
         </div>
 

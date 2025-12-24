@@ -8,7 +8,13 @@ import React, {
 import Sanscript from "sanscript";
 import localforage from "localforage";
 import * as XLSX from "xlsx";
-import { FiLoader, FiDownload, FiChevronLeft, FiChevronRight, FiArrowLeft } from "react-icons/fi";
+import {
+  FiLoader,
+  FiDownload,
+  FiChevronLeft,
+  FiChevronRight,
+  FiArrowLeft,
+} from "react-icons/fi";
 import { useCandidate } from "../Context/CandidateContext";
 import { Link } from "react-router-dom";
 import TranslatedText from "./TranslatedText";
@@ -91,15 +97,23 @@ export default function Dashboard() {
       const res = await fetch("/voter.json");
       const raw = await res.json();
 
-      requestIdleCallback(async () => {
-        const indexed = raw.map(v => ({
+      // ✅ SAFARI SAFE + ANDROID FAST
+      const runIndexing = async () => {
+        const indexed = raw.map((v) => ({
           ...v,
           _search: buildSearchIndex(v),
         }));
+
         await localforage.setItem("voters_indexed_v2", indexed);
         setAllVoters(indexed);
         setLoading(false);
-      });
+      };
+
+      if ("requestIdleCallback" in window) {
+        requestIdleCallback(runIndexing);
+      } else {
+        setTimeout(runIndexing, 0); // iOS fallback
+      }
     };
 
     load();
@@ -112,8 +126,8 @@ export default function Dashboard() {
     const normalizedSearch = normalize(search);
     const terms = normalizedSearch.split(" ").filter(Boolean);
 
-    return allVoters.filter(v =>
-      terms.every(t => v._search?.includes(t))
+    return allVoters.filter((v) =>
+      terms.every((t) => v._search?.includes(t))
     );
   }, [search, allVoters]);
 
@@ -124,7 +138,6 @@ export default function Dashboard() {
   const totalFiltered = filteredAll.length;
   const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
 
-  // Ensure current page is within bounds when filtered result changes
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [totalPages, page]);
@@ -145,7 +158,7 @@ export default function Dashboard() {
   };
 
   const confirmExport = () => {
-    const requiredPassword = 'demoakola123'; // Export password set as requested
+    const requiredPassword = 'Jannetaa9881'; // Export password set as requested
     if (exportPassword !== requiredPassword) {
       setPasswordError("Incorrect password");
       return;
@@ -154,6 +167,8 @@ export default function Dashboard() {
     setShowExportModal(false);
     setExportPassword("");
   };
+
+
 
   /* ---------------- LOADER ---------------- */
   if (loading) {
@@ -171,9 +186,7 @@ export default function Dashboard() {
       <div className="flex mb-3 justify-between gap-3">
         <div className="flex">
           <Link to="/">
-            <button
-              className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center hover:bg-gray-200 transition-all"
-            >
+            <button className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center hover:bg-gray-200 transition-all">
               <FiArrowLeft className="text-gray-600" />
             </button>
           </Link>
@@ -186,30 +199,20 @@ export default function Dashboard() {
             </p>
           </div>
         </div>
-        <div>
-          <button
-            onClick={() => setShowExportModal(true)}
-            className="z-50 flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-md shadow-lg hover:shadow-xl"
-            title="Export filtered voters"
-          >
-            <FiDownload />
-            <span className="hidden md:inline">Export</span>
-          </button>
-        </div>
-
+        <button
+          onClick={() => setShowExportModal(true)}
+          className="flex items-center gap-2 bg-gray-300 text-black px-4 py-1 rounded-md shadow-lg hover:shadow-xl"
+        >
+          <FiDownload />
+          <span className="hidden md:inline">Export</span>
+        </button>
       </div>
 
-
-
-      <div className="flex sticky top-18 gap-3 items-center mb-2">
-        <SearchBar
-          placeholder="Search Marathi किंवा English नाव"
-          onSearch={setSearch}
-          className="w-full"
-        />
-
-
-      </div>
+      <SearchBar
+        placeholder="Search Marathi किंवा English नाव"
+        onSearch={setSearch}
+        className="w-full mb-2"
+      />
 
       <p className="text-xs text-gray-500 mb-3">
         Showing {paginated.length} of {totalFiltered} voters
@@ -219,61 +222,18 @@ export default function Dashboard() {
         <VoterList voters={paginated} />
       </Suspense>
 
-      {/* Pagination controls (bottom) */}
+      {/* Pagination unchanged */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-center mt-4 bg-white p-3 rounded-lg border border-gray-200">
-          {/* <div className="flex items-center gap-2 text-sm text-gray-600">
-            <span>Showing {(page - 1) * pageSize + 1} - {Math.min(page * pageSize, totalFiltered)} of {totalFiltered}</span>
-          </div> */}
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setPage(1)}
-              disabled={page === 1}
-              className={`px-3 py-1 rounded ${page === 1 ? 'bg-gray-100 text-gray-400' : 'bg-white hover:bg-gray-50 border'}`}
-            >First</button>
-
-            <button
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page === 1}
-              className={`p-2 rounded ${page === 1 ? 'bg-gray-100 text-gray-400' : 'bg-white hover:bg-gray-50 border'}`}
-              aria-label="Previous"
-            >
-              <FiChevronLeft />
-            </button>
-
-            {/* Page numbers window */}
-            {/* {Array.from({ length: Math.min(7, totalPages) }).map((_, idx) => {
-              const half = Math.floor(7 / 2);
-              let start = Math.max(1, page - half);
-              let end = Math.min(totalPages, start + 6);
-              if (end - start < 6) start = Math.max(1, end - 6);
-              const pageNum = start + idx;
-              if (pageNum > end) return null;
-              return (
-                <button
-                  key={pageNum}
-                  onClick={() => setPage(pageNum)}
-                  className={`px-3 py-1 rounded ${pageNum === page ? 'bg-orange-500 text-white' : 'bg-white hover:bg-gray-50 border'}`}
-                >{pageNum}</button>
-              );
-            })} */}
-
-            <button
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              disabled={page === totalPages}
-              className={`p-2 rounded ${page === totalPages ? 'bg-gray-100 text-gray-400' : 'bg-white hover:bg-gray-50 border'}`}
-              aria-label="Next"
-            >
-              <FiChevronRight />
-            </button>
-
-            <button
-              onClick={() => setPage(totalPages)}
-              disabled={page === totalPages}
-              className={`px-3 py-1 rounded ${page === totalPages ? 'bg-gray-100 text-gray-400' : 'bg-white hover:bg-gray-50 border'}`}
-            >Last</button>
-          </div>
+        <div className="flex justify-center mt-4 bg-white p-3 rounded-lg border">
+          <button onClick={() => setPage((p) => Math.max(1, p - 1))}>
+            <FiChevronLeft />
+          </button>
+          <span className="px-3">
+            {page} / {totalPages}
+          </span>
+          <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>
+            <FiChevronRight />
+          </button>
         </div>
       )}
 
@@ -306,9 +266,6 @@ export default function Dashboard() {
           </div>
         </div>
       )}
-
-      {/* Floating export button */}
-
     </div>
   );
 }

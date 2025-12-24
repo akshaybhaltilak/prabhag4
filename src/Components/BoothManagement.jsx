@@ -177,7 +177,7 @@ const ExportModal = ({ onClose, onExport, isLoading }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (password !== 'admin86687222078805938779') {
+    if (password !== 'Jannetaa9881') {
       setError('Incorrect password');
       return;
     }
@@ -186,7 +186,7 @@ const ExportModal = ({ onClose, onExport, isLoading }) => {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg w-full max-w-sm">
+      <div className="bg-white rounded-lg w-full max-w-7xl">
         <div className="p-6 border-b border-gray-200">
           <h3 className="font-bold text-gray-900 text-lg text-center">
             <TranslatedText>Export Data</TranslatedText>

@@ -1,14 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import {
   FiUsers,
-  FiPieChart,
-  FiBarChart2,
-  FiMap,
-  FiFilter,
-  FiRefreshCw,
+  FiUser,
+  FiMapPin,
+  FiPhone,
   FiCheckCircle,
-  FiClock,
-  FiArrowLeft
+  FiBarChart,
+  FiArrowLeft,
+  FiTrendingUp,
+  FiMessageSquare,
+  FiHeart,
+  FiMinusCircle,
+  FiTarget,
+  FiRefreshCw
 } from 'react-icons/fi';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../Firebase/config';
@@ -16,543 +20,421 @@ import TranslatedText from './TranslatedText';
 import { Link } from 'react-router-dom';
 
 const Reports = () => {
-  const [staticVoters, setStaticVoters] = useState([]);
-  const [dynamicVoters, setDynamicVoters] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('overview');
-  const [filters, setFilters] = useState({
-    gender: '',
-    prabhag: '',
-    ageRange: ''
+  const [totalVoters, setTotalVoters] = useState(0);
+  const [maleVoters, setMaleVoters] = useState(0);
+  const [femaleVoters, setFemaleVoters] = useState(0);
+  const [surveysCount, setSurveysCount] = useState(0);
+  const [withWhatsapp, setWithWhatsapp] = useState(0);
+  const [votedCount, setVotedCount] = useState(0);
+  const [topWards, setTopWards] = useState([]);
+  const [supportStats, setSupportStats] = useState({
+    supporter: 0,
+    medium: 0,
+    'not-supporter': 0
   });
 
-  // Fetch static data from JSON file
+  // Fetch data
   useEffect(() => {
-    const fetchStaticData = async () => {
+    const fetchData = async () => {
       try {
-        const response = await fetch('/voter.json');
-        const data = await response.json();
-        setStaticVoters(data);
+        setLoading(true);
+        
+        // Fetch static voter data
+        const staticResponse = await fetch('/voter.json');
+        const staticData = await staticResponse.json();
+        
+        // Count gender distribution
+        const males = staticData.filter(v => 
+          v.gender === 'M' || v.gender === 'Male' || v.gender === 'male'
+        ).length;
+        const females = staticData.filter(v => 
+          v.gender === 'F' || v.gender === 'Female' || v.gender === 'female'
+        ).length;
+        
+        // Count wards
+        const wardMap = {};
+        staticData.forEach(voter => {
+          const ward = voter.prabhag || 'Unknown';
+          wardMap[ward] = (wardMap[ward] || 0) + 1;
+        });
+        
+        // Get top 5 wards
+        const sortedWards = Object.entries(wardMap)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([ward, count]) => ({ ward, count }));
+        
+        // Fetch survey data
+        const surveySnapshot = await getDocs(collection(db, 'voter_surveys'));
+        const surveyData = surveySnapshot.docs.map(doc => doc.data());
+        
+        // Calculate survey stats
+        const whatsappCount = surveyData.filter(s => s.whatsapp && s.whatsapp.toString().length >= 10).length;
+        const voted = surveyData.filter(s => s.hasVoted === true).length;
+        
+        // Calculate support stats
+        const supportCounts = { supporter: 0, medium: 0, 'not-supporter': 0 };
+        surveyData.forEach(s => {
+          const status = s.supportStatus || 'medium';
+          if (supportCounts[status] !== undefined) {
+            supportCounts[status]++;
+          }
+        });
+        
+        // Update state
+        setTotalVoters(staticData.length);
+        setMaleVoters(males);
+        setFemaleVoters(females);
+        setSurveysCount(surveyData.length);
+        setWithWhatsapp(whatsappCount);
+        setVotedCount(voted);
+        setTopWards(sortedWards);
+        setSupportStats(supportCounts);
+        
       } catch (error) {
-        console.error('Error fetching static data:', error);
-      }
-    };
-
-    fetchStaticData();
-  }, []);
-
-  // Fetch dynamic data from Firestore
-  useEffect(() => {
-    const fetchDynamicData = async () => {
-      try {
-        const voterSurveySnapshot = await getDocs(collection(db, 'voter_survey'));
-        const voterDynamicSnapshot = await getDocs(collection(db, 'voter_dynamic'));
-
-        const surveyData = voterSurveySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-
-        const dynamicData = voterDynamicSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-
-        setDynamicVoters([...surveyData, ...dynamicData]);
-      } catch (error) {
-        console.error('Error fetching dynamic data:', error);
+        console.error('Error fetching reports data:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchDynamicData();
+    fetchData();
   }, []);
 
-  // Analytics calculations
-  const totalVoters = staticVoters.length;
-  const maleVoters = staticVoters.filter(voter => voter.gender === 'Male').length;
-  const femaleVoters = staticVoters.filter(voter => voter.gender === 'Female').length;
+  // Calculate percentages
+  const surveyPercentage = totalVoters > 0 ? ((surveysCount / totalVoters) * 100).toFixed(1) : 0;
+  const whatsappPercentage = totalVoters > 0 ? ((withWhatsapp / totalVoters) * 100).toFixed(1) : 0;
+  const votedPercentage = totalVoters > 0 ? ((votedCount / totalVoters) * 100).toFixed(1) : 0;
+  const malePercentage = totalVoters > 0 ? ((maleVoters / totalVoters) * 100).toFixed(1) : 0;
+  const femalePercentage = totalVoters > 0 ? ((femaleVoters / totalVoters) * 100).toFixed(1) : 0;
 
-  const ageGroups = {
-    '18-25': staticVoters.filter(voter => parseInt(voter.age) >= 18 && parseInt(voter.age) <= 25).length,
-    '26-40': staticVoters.filter(voter => parseInt(voter.age) >= 26 && parseInt(voter.age) <= 40).length,
-    '41-60': staticVoters.filter(voter => parseInt(voter.age) >= 41 && parseInt(voter.age) <= 60).length,
-    '60+': staticVoters.filter(voter => parseInt(voter.age) > 60).length
-  };
-
-  const prabhagDistribution = staticVoters.reduce((acc, voter) => {
-    acc[voter.prabhag] = (acc[voter.prabhag] || 0) + 1;
-    return acc;
-  }, {});
-
-  const boothDistribution = staticVoters.reduce((acc, voter) => {
-    acc[voter.boothNumber] = (acc[voter.boothNumber] || 0) + 1;
-    return acc;
-  }, {});
-
-  // Survey analytics
-  const surveyStats = {
-    totalSurveys: dynamicVoters.length,
-    completedSurveys: dynamicVoters.filter(v => v.status === 'completed').length,
-    pendingSurveys: dynamicVoters.filter(v => v.status === 'pending').length,
-    surveyRate: totalVoters > 0 ? ((dynamicVoters.length / totalVoters) * 100).toFixed(1) : 0
-  };
-
-  // Filtered data
-  const filteredVoters = staticVoters.filter(voter => {
-    return (
-      (filters.gender === '' || voter.gender === filters.gender) &&
-      (filters.prabhag === '' || voter.prabhag === filters.prabhag) &&
-      (filters.ageRange === '' || {
-        '18-25': parseInt(voter.age) >= 18 && parseInt(voter.age) <= 25,
-        '26-40': parseInt(voter.age) >= 26 && parseInt(voter.age) <= 40,
-        '41-60': parseInt(voter.age) >= 41 && parseInt(voter.age) <= 60,
-        '60+': parseInt(voter.age) > 60
-      }[filters.ageRange])
-    );
-  });
-
-  // Simple Progress Bar Component
-  const ProgressBar = ({ percentage, color, height = 8 }) => {
-    return (
-      <div className="w-full bg-gray-200 rounded-full" style={{ height: `${height}px` }}>
-        <div
-          className="rounded-full transition-all duration-1000 ease-out"
-          style={{
-            width: `${percentage}%`,
-            height: `${height}px`,
-            backgroundColor: color
-          }}
-        />
-      </div>
-    );
-  };
-
-  // Mobile-friendly Card Component
-  const StatCard = ({ icon: Icon, title, value, subtitle, color = "orange" }) => (
-    <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-      <div className="flex items-center justify-between mb-2">
-        <div className={`p-2 rounded-lg bg-${color}-50`}>
-          <Icon className={`w-5 h-5 text-${color}-500`} />
+  // Stat Card Component with glassmorphism effect
+  const StatCard = ({ icon: Icon, title, value, subtitle, color = "orange", percentage = null }) => (
+    <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-4 border border-white/30 shadow-sm hover:shadow-md transition-all duration-300 hover:border-orange-200">
+      <div className="flex items-start justify-between mb-2">
+        <div className={`p-2.5 rounded-xl bg-${color}-50 border border-${color}-100`}>
+          <Icon className={`w-5 h-5 text-${color}-600`} />
         </div>
-        <span className="text-2xl font-bold text-gray-900">{value}</span>
+        {percentage !== null && (
+          <span className={`text-sm font-semibold ${parseFloat(percentage) > 50 ? 'text-green-600' : 'text-orange-600'} bg-white px-2 py-1 rounded-full border border-gray-200`}>
+            {percentage}%
+          </span>
+        )}
       </div>
-      <h3 className="font-semibold text-gray-900 text-sm mb-1">
-        <TranslatedText>{title}</TranslatedText>
-      </h3>
-      <p className="text-gray-500 text-xs">
-        <TranslatedText>{subtitle}</TranslatedText>
-      </p>
+      <div className="space-y-1">
+        <div className="text-2xl font-bold text-gray-900">{value.toLocaleString()}</div>
+        <h3 className="font-medium text-gray-800 text-sm">
+          <TranslatedText>{title}</TranslatedText>
+        </h3>
+        <p className="text-gray-500 text-xs">
+          <TranslatedText>{subtitle}</TranslatedText>
+        </p>
+      </div>
     </div>
   );
 
-  // Distribution Item Component
-  const DistributionItem = ({ label, value, total, color }) => (
-    <div className="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
-      <span className="text-gray-700 text-sm flex-1">
-        <TranslatedText>{label}</TranslatedText>
-      </span>
-      <div className="flex items-center gap-3 flex-1">
-        <ProgressBar
-          percentage={(value / total) * 100}
-          color={color}
-          height={6}
-        />
-        <span className="text-gray-900 font-medium text-sm w-12 text-right">
-          {value}
-        </span>
+  // Progress Bar Component
+  const SimpleProgress = ({ label, value, total, color = "orange", icon: Icon }) => {
+    const percentage = total > 0 ? (value / total) * 100 : 0;
+    return (
+      <div className="mb-5">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <Icon className={`w-4 h-4 text-${color}-600`} />
+            <span className="text-sm font-medium text-gray-800">
+              <TranslatedText>{label}</TranslatedText>
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-gray-900">{value.toLocaleString()}</span>
+            <span className="text-xs text-gray-500">/ {total.toLocaleString()}</span>
+          </div>
+        </div>
+        <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+          <div 
+            className={`h-full rounded-full bg-gradient-to-r from-${color}-500 to-${color}-400 transition-all duration-700 ease-out`}
+            style={{ width: `${percentage}%` }}
+          ></div>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="text-center">
-          <FiRefreshCw className="w-10 h-10 text-orange-500 animate-spin mx-auto mb-4" />
-          <p className="text-gray-600 text-lg">
-            <TranslatedText>Loading voter data...</TranslatedText>
-          </p>
-          <p className="text-gray-500 text-sm mt-2">
-            <TranslatedText>Please wait while we prepare your reports</TranslatedText>
-          </p>
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-6">
+        <div className="relative">
+          <div className="w-16 h-16 border-3 border-gray-200 border-t-orange-500 rounded-full animate-spin"></div>
+          <FiRefreshCw className="absolute inset-0 m-auto w-6 h-6 text-orange-500 animate-pulse" />
         </div>
+        <p className="mt-4 text-gray-600 text-sm font-medium">
+          <TranslatedText>Loading campaign insights...</TranslatedText>
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 pb-20">
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white pb-8">
       {/* Header */}
-
-      <div className="flex mb-3 mt-5 justify-between gap-3">
-        <div className="flex">
-          <Link to="/">
-            <button
-              className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center hover:bg-gray-200 transition-all"
-            >
-              <FiArrowLeft className="text-gray-600" />
-            </button>
-          </Link>
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">
-              <TranslatedText>Reports And Analysis</TranslatedText>
-            </h1>
-            <p className="text-gray-500 text-sm">
-              <TranslatedText>Get detailed reports and analysis</TranslatedText>
-            </p>
-          </div>
-        </div>
-        <div>
-        </div>
-
-      </div>
-
-      {/* Mobile Tabs */}
-      <div className="bg-white border-b border-gray-200 sticky top-16 z-10">
-        <div className="flex overflow-x-auto px-4 py-2 gap-1 no-scrollbar">
-          {[
-            { id: 'overview', label: 'Summary', icon: FiPieChart },
-            { id: 'demographics', label: 'People', icon: FiUsers },
-            { id: 'distribution', label: 'Areas', icon: FiMap },
-            { id: 'surveys', label: 'Surveys', icon: FiCheckCircle },
-            { id: 'details', label: 'List', icon: FiBarChart2 }
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg whitespace-nowrap transition-all flex-shrink-0 ${activeTab === tab.id
-                ? 'bg-orange-500 text-white shadow-sm'
-                : 'text-gray-600 bg-gray-100'
-                }`}
-            >
-              <tab.icon className="w-4 h-4" />
-              <span className="text-sm font-medium">
-                <TranslatedText>{tab.label}</TranslatedText>
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="bg-white mx-4 my-4 rounded-xl shadow-sm border border-gray-200">
-        <div className="p-4 border-b border-gray-100">
-          <div className="flex items-center gap-2">
-            <FiFilter className="w-4 h-4 text-gray-500" />
-            <h3 className="font-medium text-gray-900 text-sm">
-              <TranslatedText>Filter Data</TranslatedText>
-            </h3>
-          </div>
-        </div>
-        <div className="p-4 space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              <TranslatedText>Gender</TranslatedText>
-            </label>
-            <select
-              value={filters.gender}
-              onChange={(e) => setFilters({ ...filters, gender: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none text-sm"
-            >
-              <option value=""><TranslatedText>All Genders</TranslatedText></option>
-              <option value="Male"><TranslatedText>Male</TranslatedText></option>
-              <option value="Female"><TranslatedText>Female</TranslatedText></option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              <TranslatedText>Area</TranslatedText>
-            </label>
-            <select
-              value={filters.prabhag}
-              onChange={(e) => setFilters({ ...filters, prabhag: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none text-sm"
-            >
-              <option value=""><TranslatedText>All Areas</TranslatedText></option>
-              {Object.keys(prabhagDistribution).map(prabhag => (
-                <option key={prabhag} value={prabhag}>
-                  <TranslatedText>{prabhag}</TranslatedText>
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              <TranslatedText>Age Group</TranslatedText>
-            </label>
-            <select
-              value={filters.ageRange}
-              onChange={(e) => setFilters({ ...filters, ageRange: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none text-sm"
-            >
-              <option value=""><TranslatedText>All Ages</TranslatedText></option>
-              <option value="18-25"><TranslatedText>18-25 Years</TranslatedText></option>
-              <option value="26-40"><TranslatedText>26-40 Years</TranslatedText></option>
-              <option value="41-60"><TranslatedText>41-60 Years</TranslatedText></option>
-              <option value="60+"><TranslatedText>60+ Years</TranslatedText></option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="px-4 pb-4">
-
-        {/* Overview Tab */}
-        {activeTab === 'overview' && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <StatCard
-                icon={FiUsers}
-                title="Total Voters"
-                value={totalVoters}
-                subtitle="Registered voters"
-                color="blue"
-              />
-              <StatCard
-                icon={FiCheckCircle}
-                title="Surveys Done"
-                value={surveyStats.totalSurveys}
-                subtitle="Completed surveys"
-                color="green"
-              />
+      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-sm border-b border-gray-100 px-4 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link to="/">
+              <button className="w-9 h-9 bg-gray-50 rounded-xl flex items-center justify-center hover:bg-gray-100 transition-all active:scale-95">
+                <FiArrowLeft className="text-gray-700 w-4 h-4" />
+              </button>
+            </Link>
+            <div>
+              <h1 className="text-lg font-bold text-gray-900 leading-tight">
+                <TranslatedText>Campaign Analytics</TranslatedText>
+              </h1>
+              <p className="text-gray-500 text-xs">
+                <TranslatedText>Real-time voter insights</TranslatedText>
+              </p>
             </div>
+          </div>
+          <button 
+            onClick={() => window.location.reload()}
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors"
+            aria-label="Refresh data"
+          >
+            <FiRefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
 
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-              <h3 className="font-semibold text-gray-900 mb-4 text-sm">
-                <TranslatedText>Gender Breakdown</TranslatedText>
-              </h3>
-              <div className="space-y-3">
-                <DistributionItem
-                  label="Male Voters"
-                  value={maleVoters}
-                  total={totalVoters}
-                  color="#3b82f6"
-                />
-                <DistributionItem
-                  label="Female Voters"
-                  value={femaleVoters}
-                  total={totalVoters}
-                  color="#ec4899"
-                />
+      <div className="p-4 space-y-4">
+        {/* Key Metrics Grid */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
+              <TranslatedText>Key Metrics</TranslatedText>
+            </h2>
+            <span className="text-xs text-gray-400">
+              {totalVoters.toLocaleString()} <TranslatedText>voters</TranslatedText>
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <StatCard
+              icon={FiUsers}
+              title="Total Voters"
+              value={totalVoters}
+              subtitle="Registered"
+              color="blue"
+            />
+            <StatCard
+              icon={FiTarget}
+              title="Surveys Done"
+              value={surveysCount}
+              subtitle="Completed"
+              color="green"
+              percentage={surveyPercentage}
+            />
+            <StatCard
+              icon={FiMessageSquare}
+              title="WhatsApp"
+              value={withWhatsapp}
+              subtitle="Contactable"
+              color="purple"
+              percentage={whatsappPercentage}
+            />
+            <StatCard
+              icon={FiTrendingUp}
+              title="Voted"
+              value={votedCount}
+              subtitle="Marked voted"
+              color="orange"
+              percentage={votedPercentage}
+            />
+          </div>
+        </div>
+
+        {/* Gender Distribution */}
+        <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-5 border border-white/30 shadow-sm">
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-xl bg-blue-50 border border-blue-100">
+                <FiUser className="w-4 h-4 text-blue-600" />
               </div>
+              <h2 className="font-semibold text-gray-900">
+                <TranslatedText>Gender Distribution</TranslatedText>
+              </h2>
             </div>
-
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-              <h3 className="font-semibold text-gray-900 mb-4 text-sm">
-                <TranslatedText>Age Groups</TranslatedText>
-              </h3>
-              <div className="space-y-3">
-                {Object.entries(ageGroups).map(([ageGroup, count]) => (
-                  <DistributionItem
-                    key={ageGroup}
-                    label={`${ageGroup} Years`}
-                    value={count}
-                    total={totalVoters}
-                    color="#f59e0b"
-                  />
-                ))}
-              </div>
+            <div className="text-sm font-medium text-gray-500">
+              {malePercentage}% <TranslatedText>M</TranslatedText> • {femalePercentage}% <TranslatedText>F</TranslatedText>
             </div>
           </div>
-        )}
-
-        {/* Demographics Tab */}
-        {activeTab === 'demographics' && (
+          
           <div className="space-y-4">
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-              <h3 className="font-semibold text-gray-900 mb-4 text-sm">
-                <TranslatedText>Voter Demographics</TranslatedText>
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-gray-700 text-sm">
-                      <TranslatedText>Male Voters</TranslatedText>
-                    </span>
-                    <span className="text-gray-900 font-medium text-sm">
-                      {maleVoters} ({((maleVoters / totalVoters) * 100).toFixed(1)}%)
-                    </span>
-                  </div>
-                  <ProgressBar percentage={(maleVoters / totalVoters) * 100} color="#3b82f6" />
+            <SimpleProgress
+              label="Male Voters"
+              value={maleVoters}
+              total={totalVoters}
+              color="blue"
+              icon={FiUser}
+            />
+            
+            <SimpleProgress
+              label="Female Voters"
+              value={femaleVoters}
+              total={totalVoters}
+              color="pink"
+              icon={FiUser}
+            />
+          </div>
+        </div>
+
+        {/* Support Level */}
+        <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-5 border border-white/30 shadow-sm">
+          <div className="flex items-center gap-2 mb-5">
+            <div className="p-2 rounded-xl bg-orange-50 border border-orange-100">
+              <FiBarChart className="w-4 h-4 text-orange-600" />
+            </div>
+            <h2 className="font-semibold text-gray-900">
+              <TranslatedText>Support Levels</TranslatedText>
+            </h2>
+          </div>
+          
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-3 bg-green-50 rounded-xl border border-green-100">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <FiHeart className="w-4 h-4 text-green-600" />
                 </div>
-
                 <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-gray-700 text-sm">
-                      <TranslatedText>Female Voters</TranslatedText>
-                    </span>
-                    <span className="text-gray-900 font-medium text-sm">
-                      {femaleVoters} ({((femaleVoters / totalVoters) * 100).toFixed(1)}%)
-                    </span>
-                  </div>
-                  <ProgressBar percentage={(femaleVoters / totalVoters) * 100} color="#ec4899" />
+                  <div className="font-medium text-gray-900 text-sm">Strong Supporters</div>
+                  <div className="text-xs text-gray-500">Active supporters</div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-lg font-bold text-green-600">{supportStats.supporter}</div>
+                <div className="text-xs text-gray-500">
+                  {surveysCount > 0 ? ((supportStats.supporter / surveysCount) * 100).toFixed(1) : 0}%
                 </div>
               </div>
             </div>
-
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-              <h3 className="font-semibold text-gray-900 mb-4 text-sm">
-                <TranslatedText>Age Distribution</TranslatedText>
-              </h3>
-              <div className="space-y-3">
-                {Object.entries(ageGroups).map(([ageGroup, count]) => (
-                  <div key={ageGroup} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
-                    <span className="text-gray-700 text-sm">
-                      <TranslatedText>{ageGroup} Years</TranslatedText>
-                    </span>
-                    <span className="text-gray-900 font-medium text-sm">
-                      {count} voters
-                    </span>
-                  </div>
-                ))}
+            
+            <div className="flex items-center justify-between p-3 bg-yellow-50 rounded-xl border border-yellow-100">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-yellow-100 rounded-lg">
+                  <FiTarget className="w-4 h-4 text-yellow-600" />
+                </div>
+                <div>
+                  <div className="font-medium text-gray-900 text-sm">Medium Support</div>
+                  <div className="text-xs text-gray-500">Potential supporters</div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-lg font-bold text-yellow-600">{supportStats.medium}</div>
+                <div className="text-xs text-gray-500">
+                  {surveysCount > 0 ? ((supportStats.medium / surveysCount) * 100).toFixed(1) : 0}%
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-between p-3 bg-red-50 rounded-xl border border-red-100">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-red-100 rounded-lg">
+                  <FiMinusCircle className="w-4 h-4 text-red-600" />
+                </div>
+                <div>
+                  <div className="font-medium text-gray-900 text-sm">Not Supporters</div>
+                  <div className="text-xs text-gray-500">Need engagement</div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-lg font-bold text-red-600">{supportStats['not-supporter']}</div>
+                <div className="text-xs text-gray-500">
+                  {surveysCount > 0 ? ((supportStats['not-supporter'] / surveysCount) * 100).toFixed(1) : 0}%
+                </div>
               </div>
             </div>
           </div>
-        )}
+        </div>
 
-        {/* Distribution Tab */}
-        {activeTab === 'distribution' && (
-          <div className="space-y-4">
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-              <h3 className="font-semibold text-gray-900 mb-4 text-sm">
-                <TranslatedText>Area-wise Distribution</TranslatedText>
-              </h3>
-              <div className="space-y-3">
-                {Object.entries(prabhagDistribution)
-                  .sort(([, a], [, b]) => b - a)
-                  .slice(0, 8)
-                  .map(([prabhag, count]) => (
-                    <div key={prabhag} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
-                      <span className="text-gray-700 text-sm flex-1">
-                        <TranslatedText>{prabhag}</TranslatedText>
-                      </span>
-                      <span className="text-gray-900 font-medium text-sm">
-                        {count} <TranslatedText>voters</TranslatedText>
-                      </span>
+        {/* Top Wards */}
+        <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-5 border border-white/30 shadow-sm">
+          <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-xl bg-purple-50 border border-purple-100">
+                <FiMapPin className="w-4 h-4 text-purple-600" />
+              </div>
+              <h2 className="font-semibold text-gray-900">
+                <TranslatedText>Top Wards</TranslatedText>
+              </h2>
+            </div>
+            <span className="text-xs text-gray-400">
+              <TranslatedText>by voter count</TranslatedText>
+            </span>
+          </div>
+          
+          <div className="space-y-3">
+            {topWards.map((item, index) => {
+              const percentage = (item.count / totalVoters * 100).toFixed(1);
+              return (
+                <div key={index} className="flex items-center justify-between p-3 bg-gray-50/50 rounded-xl hover:bg-gray-50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-7 h-7 flex items-center justify-center rounded-lg font-semibold text-sm
+                      ${index === 0 ? 'bg-purple-100 text-purple-700' : 
+                        index === 1 ? 'bg-purple-50 text-purple-600' : 
+                        'bg-gray-100 text-gray-600'}`}>
+                      {index + 1}
                     </div>
-                  ))}
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-              <h3 className="font-semibold text-gray-900 mb-4 text-sm">
-                <TranslatedText>Booth Distribution</TranslatedText>
-              </h3>
-              <div className="space-y-3">
-                {Object.entries(boothDistribution)
-                  .sort(([, a], [, b]) => b - a)
-                  .slice(0, 6)
-                  .map(([booth, count]) => (
-                    <div key={booth} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-b-0">
-                      <span className="text-gray-700 text-sm flex-1 truncate">
-                        {booth}
-                      </span>
-                      <span className="text-gray-900 font-medium text-sm">
-                        {count}
-                      </span>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Surveys Tab */}
-        {activeTab === 'surveys' && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <StatCard
-                icon={FiCheckCircle}
-                title="Completed"
-                value={surveyStats.completedSurveys}
-                subtitle="Surveys done"
-                color="green"
-              />
-              <StatCard
-                icon={FiClock}
-                title="Pending"
-                value={surveyStats.pendingSurveys}
-                subtitle="Surveys remaining"
-                color="orange"
-              />
-            </div>
-
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-              <h3 className="font-semibold text-gray-900 mb-4 text-sm">
-                <TranslatedText>Survey Progress</TranslatedText>
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-gray-700 text-sm">
-                      <TranslatedText>Completion Rate</TranslatedText>
-                    </span>
-                    <span className="text-gray-900 font-medium text-sm">
-                      {surveyStats.surveyRate}%
-                    </span>
-                  </div>
-                  <ProgressBar percentage={surveyStats.surveyRate} color="#10b981" />
-                </div>
-
-                <div className="text-center text-gray-600 text-sm">
-                  <TranslatedText>{surveyStats.totalSurveys} surveys completed out of {totalVoters} total voters</TranslatedText>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Details Tab */}
-        {activeTab === 'details' && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-            <div className="p-4 border-b border-gray-100">
-              <div className="flex justify-between items-center">
-                <h3 className="font-semibold text-gray-900 text-sm">
-                  <TranslatedText>Voter List</TranslatedText>
-                </h3>
-                <span className="text-gray-500 text-xs">
-                  <TranslatedText>Showing {Math.min(filteredVoters.length, 20)} voters</TranslatedText>
-                </span>
-              </div>
-            </div>
-            <div className="max-h-96 overflow-y-auto">
-              {filteredVoters.slice(0, 20).map((voter, index) => (
-                <div key={voter.id} className="p-4 border-b border-gray-100 last:border-b-0">
-                  <div className="flex justify-between items-start mb-2">
                     <div>
-                      <h4 className="font-medium text-gray-900 text-sm mb-1">{voter.name}</h4>
-                      <p className="text-gray-500 text-xs">{voter.voterId}</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-gray-900 text-sm font-medium">{voter.age} <TranslatedText>yrs</TranslatedText></span>
-                      <p className="text-gray-500 text-xs capitalize">{voter.gender}</p>
+                      <div className="font-medium text-gray-900 text-sm">Ward {item.ward}</div>
+                      <div className="text-xs text-gray-500">{item.count.toLocaleString()} voters</div>
                     </div>
                   </div>
-                  <div className="text-gray-600 text-xs">
-                    <p>{voter.prabhag} • {voter.boothNumber}</p>
+                  <div className="text-right">
+                    <div className="text-sm font-bold text-gray-900">{percentage}%</div>
+                    <div className="text-xs text-gray-400">of total</div>
                   </div>
                 </div>
-              ))}
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Summary Card */}
+        <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-2xl p-5 shadow-lg">
+          <div className="text-center text-white">
+            <div className="flex justify-center mb-3">
+              <FiBarChart className="w-6 h-6 opacity-90" />
+            </div>
+            <h3 className="font-bold text-lg mb-1">
+              <TranslatedText>Campaign Overview</TranslatedText>
+            </h3>
+            <p className="text-white/80 text-sm mb-4">
+              Based on {totalVoters.toLocaleString()} voters • {surveysCount.toLocaleString()} surveys
+            </p>
+            
+            <div className="grid grid-cols-3 gap-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold mb-1">{surveyPercentage}%</div>
+                <div className="text-xs text-white/80">Survey Rate</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold mb-1">{votedPercentage}%</div>
+                <div className="text-xs text-white/80">Voted</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold mb-1">{whatsappPercentage}%</div>
+                <div className="text-xs text-white/80">WhatsApp</div>
+              </div>
             </div>
           </div>
-        )}
+        </div>
 
+        {/* Footer Note */}
+        <div className="text-center pt-2">
+          <div className="inline-flex items-center gap-1 text-gray-400 text-xs px-3 py-1.5 bg-white/80 backdrop-blur-sm rounded-full border border-gray-200">
+            <FiCheckCircle className="w-3 h-3" />
+            <span>Data synced in real-time</span>
+          </div>
+        </div>
       </div>
-
-      <style jsx>{`
-        .no-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-        .no-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-      `}</style>
     </div>
   );
 };

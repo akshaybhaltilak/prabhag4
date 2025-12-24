@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { FiPrinter, FiBluetooth, FiDownload, FiShare2, FiMessageCircle, FiX } from 'react-icons/fi';
-import { FaWhatsapp, FaRegFilePdf } from 'react-icons/fa';
+import { FiPrinter, FiBluetooth, FiShare2, FiMessageCircle, FiX, FiPhone } from 'react-icons/fi';
+import { FaWhatsapp } from 'react-icons/fa';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import TranslatedText from './TranslatedText';
 import { db } from '../Firebase/config';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { useCandidate } from '../Context/CandidateContext';
+import { FiUser } from 'react-icons/fi'; // Added for contact import button
 
 // Global Bluetooth connection state
 let globalBluetoothConnection = {
@@ -16,16 +17,17 @@ let globalBluetoothConnection = {
 };
 
 const BluetoothPrinter = ({ voter, familyMembers }) => {
+  const [importingContact, setImportingContact] = useState(false); // Added for contact import
   const [printing, setPrinting] = useState(false);
   const [bluetoothConnected, setBluetoothConnected] = useState(globalBluetoothConnection.connected);
   const [printerDevice, setPrinterDevice] = useState(globalBluetoothConnection.device);
   const [printerCharacteristic, setPrinterCharacteristic] = useState(globalBluetoothConnection.characteristic);
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
-  const [showSMSModal, setShowSMSModal] = useState(false);
+  const [showCallModal, setShowCallModal] = useState(false);
   const [whatsappNumber, setWhatsappNumber] = useState('');
-  const [smsNumber, setSmsNumber] = useState('');
   const [isFamily, setIsFamily] = useState(false);
   const [voterData, setVoterData] = useState(null);
+  const [actionType, setActionType] = useState(''); // 'whatsapp' or 'call'
 
   const { candidateInfo } = useCandidate();
 
@@ -72,6 +74,71 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
     }
   };
 
+  // Add contact import function
+  const handleContactImport = async (type = 'whatsapp') => {
+    // Check if Contact Picker API is supported
+    if (!('contacts' in navigator && 'ContactsManager' in window)) {
+      alert('संपर्क आयात आपल्या ब्राउझरमध्ये समर्थित नाही. कृपया नंबर मॅन्युअली टाका.');
+      return;
+    }
+
+    setImportingContact(true);
+
+    try {
+      // Specify which contact properties to request
+      const props = ['name', 'tel'];
+      const opts = { multiple: false };
+
+      // Open the contact picker (this requires a user gesture)
+      const contacts = await navigator.contacts.select(props, opts);
+
+      if (contacts && contacts.length > 0) {
+        const selectedContact = contacts[0];
+        const phoneNumbers = selectedContact.tel || [];
+        const validPhoneNumber = phoneNumbers.find(num => num && num.trim().length > 0);
+
+        if (validPhoneNumber) {
+          const cleanedNumber = validPhoneNumber.replace(/\D/g, '');
+          
+          // Remove country code if present
+          let finalNumber = cleanedNumber;
+          if (cleanedNumber.startsWith('91') && cleanedNumber.length === 12) {
+            finalNumber = cleanedNumber.substring(2);
+          } else if (cleanedNumber.startsWith('+91') && cleanedNumber.length === 13) {
+            finalNumber = cleanedNumber.substring(3);
+          }
+          
+          // Ensure it's exactly 10 digits
+          if (finalNumber.length === 10) {
+            // Set the number in the appropriate state
+            setWhatsappNumber(finalNumber);
+            console.log(`✅ Imported contact number:`, finalNumber);
+          } else {
+            alert(`अमान्य फोन नंबर लांबी: ${finalNumber.length} अंक. कृपया 10-अंकी भारतीय नंबर टाका.`);
+          }
+        } else {
+          alert('निवडलेल्या संपर्कात कोणताही वैध फोन नंबर नाही.');
+        }
+      } else {
+        console.log('वापरकर्त्याने संपर्क निवड रद्द केली.');
+      }
+    } catch (error) {
+      console.error('Error accessing contacts:', error);
+      
+      if (error.name === 'AbortError') {
+        console.log('User canceled contact selection.');
+      } else if (error.name === 'NotAllowedError') {
+        alert('संपर्कांमध्ये प्रवेश करण्याची परवानगी नाकारण्यात आली. कृपया नंबर मॅन्युअली टाका.');
+      } else if (error.name === 'SecurityError') {
+        alert('संपर्क पिकरसाठी सुरक्षित (HTTPS) कनेक्शन आवश्यक आहे.');
+      } else {
+        alert('संपर्कांमध्ये प्रवेश करण्यात अयशस्वी. कृपया नंबर मॅन्युअली टाका.');
+      }
+    } finally {
+      setImportingContact(false);
+    }
+  };
+
   // Load voter data from local storage or Firebase and merge voter_surveys
   const loadVoterData = async () => {
     try {
@@ -109,9 +176,8 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
         const vsSnap = await getDoc(vsRef);
         if (vsSnap.exists()) {
           const vsData = vsSnap.data() || {};
-          // Normalize phone keys (phone, whatsapp)
+          // Get whatsapp number from voter_surveys
           if (vsData.whatsapp) merged.whatsapp = String(vsData.whatsapp).replace(/\D/g, '');
-          if (vsData.phone) merged.phone = String(vsData.phone).replace(/\D/g, '');
         }
       } catch (e) {
         console.warn('voter_surveys fetch failed', e);
@@ -126,20 +192,16 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
     }
   };
 
-  // Save contact number to voters and voter_surveys and local storage
-  const saveContactNumber = async (type, number) => {
+  // Save whatsapp number to voter_surveys and local storage
+  const saveWhatsappNumber = async (number) => {
     try {
       const docId = voter?.id || voter?.voterId;
       if (!docId) throw new Error('Voter ID not available');
 
       const cleaned = String(number).replace(/\D/g, '');
-      const updateData = type === 'whatsapp' ? { whatsapp: cleaned } : { phone: cleaned };
+      const updateData = { whatsapp: cleaned };
 
-      // Save to voters collection (merge)
-      const voterDocRef = doc(db, 'voters', String(docId));
-      await setDoc(voterDocRef, updateData, { merge: true });
-
-      // Save to voter_surveys root (merge)
+      // Save to voter_surveys collection (main source for whatsapp)
       const vsDocRef = doc(db, 'voter_surveys', String(docId));
       await setDoc(vsDocRef, updateData, { merge: true });
 
@@ -157,19 +219,31 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
 
       return true;
     } catch (error) {
-      console.error(`Error saving ${type} number:`, error);
+      console.error('Error saving whatsapp number:', error);
       return false;
     }
   };
 
-  const getContactNumber = (type) => {
-    const val = voterData?.[type];
-    if (!val) return '';
-    return String(val).replace(/\D/g, '');
+  const getWhatsappNumber = () => {
+    if (!voterData) return '';
+    
+    // First check voter_surveys whatsapp (dynamic data)
+    if (voterData.whatsapp) {
+      const num = String(voterData.whatsapp).replace(/\D/g, '');
+      if (num.length === 10) return num;
+    }
+    
+    // Check if whatsapp exists in voter.json (static data)
+    if (voter?.whatsapp) {
+      const num = String(voter.whatsapp).replace(/\D/g, '');
+      if (num.length === 10) return num;
+    }
+    
+    return '';
   };
 
-  const hasContactNumber = (type) => {
-    const number = getContactNumber(type);
+  const hasWhatsappNumber = () => {
+    const number = getWhatsappNumber();
     return number && number.length === 10;
   };
 
@@ -222,47 +296,51 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
       message += `*मतदान केंद्र:* ${safeString(voterData.pollingStationAddress || 'N/A')}\n\n`;
     }
 
-    message += `मी आपला *${safeString(candidateInfo.name)}* माझी निशाणी *${safeString(candidateInfo.electionSymbol)}* या चिन्हावर मतदान करून मला प्रचंड बहुमतांनी विजय करा\n\n`;
-    ;
+    message += `${safeString(candidateInfo.messageWhatsapp)}`
+    message += `📍 *अधिक माहितीसाठी भेट द्या:* ${WEBSITE_URL}`;
 
     return message;
   };
 
-  // Main WhatsApp share flow
+  // Handle WhatsApp share flow
   const handleWhatsAppShare = async (isFamilyShare = false) => {
     if (!voterData) return;
 
     setIsFamily(isFamilyShare);
+    setActionType('whatsapp');
 
-    const docId = voter?.id || voter?.voterId;
-    // Prefer the voter_surveys contact if available (we merged it on load)
-    const vsNumber = getContactNumber('whatsapp');
-
-    if (vsNumber && vsNumber.length === 10) {
+    // Check if whatsapp number exists in voter_surveys or voter.json
+    const whatsappNum = getWhatsappNumber();
+    
+    if (whatsappNum) {
+      // Number exists, proceed with WhatsApp share
       const message = generateWhatsAppMessage(isFamilyShare);
-      const url = `https://wa.me/91${vsNumber}?text=${encodeURIComponent(message)}`;
+      const url = `https://wa.me/91${whatsappNum}?text=${encodeURIComponent(message)}`;
       window.open(url, '_blank');
-      return;
+    } else {
+      // Number doesn't exist, open modal to ask for number
+      setWhatsappNumber('');
+      setShowWhatsAppModal(true);
     }
-
-    // If no number saved, open modal prefilled with any existing number (if any)
-    setWhatsappNumber(getContactNumber('whatsapp') || '');
-    setShowWhatsAppModal(true);
   };
 
-  const handleSMSShare = async () => {
+  // Handle Call action
+  const handleCall = async () => {
     if (!voterData) return;
 
-    const vsNumber = getContactNumber('phone');
+    setActionType('call');
 
-    if (vsNumber && vsNumber.length === 10) {
-      const message = generateWhatsAppMessage(false);
-      window.open(`sms:${vsNumber}?body=${encodeURIComponent(message)}`, '_blank');
-      return;
+    // Check if whatsapp number exists in voter_surveys or voter.json
+    const whatsappNum = getWhatsappNumber();
+    
+    if (whatsappNum) {
+      // Number exists, initiate call
+      window.open(`tel:${whatsappNum}`, '_blank');
+    } else {
+      // Number doesn't exist, open modal to ask for number
+      setWhatsappNumber('');
+      setShowCallModal(true);
     }
-
-    setSmsNumber(getContactNumber('phone') || '');
-    setShowSMSModal(true);
   };
 
   const confirmWhatsAppShare = async () => {
@@ -272,9 +350,10 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
     }
 
     const cleanedNumber = whatsappNumber.replace(/\D/g, '');
-    const saved = await saveContactNumber('whatsapp', cleanedNumber);
+    const saved = await saveWhatsappNumber(cleanedNumber);
 
     if (saved) {
+      // Now proceed with WhatsApp share
       const message = generateWhatsAppMessage(isFamily);
       const url = `https://wa.me/91${cleanedNumber}?text=${encodeURIComponent(message)}`;
       window.open(url, '_blank');
@@ -285,22 +364,22 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
     }
   };
 
-  const confirmSMSShare = async () => {
-    if (!validatePhoneNumber(smsNumber)) {
-      alert('कृपया वैध 10-अंकी मोबाईल क्रमांक प्रविष्ट करा');
+  const confirmCall = async () => {
+    if (!validatePhoneNumber(whatsappNumber)) {
+      alert('कृपया वैध 10-अंकी व्हॉट्सअॅप क्रमांक प्रविष्ट करा');
       return;
     }
 
-    const cleanedNumber = smsNumber.replace(/\D/g, '');
-    const saved = await saveContactNumber('phone', cleanedNumber);
+    const cleanedNumber = whatsappNumber.replace(/\D/g, '');
+    const saved = await saveWhatsappNumber(cleanedNumber);
 
     if (saved) {
-      const message = generateWhatsAppMessage(false);
-      window.open(`sms:${cleanedNumber}?body=${encodeURIComponent(message)}`, '_blank');
-      setShowSMSModal(false);
-      setSmsNumber('');
+      // Now initiate call
+      window.open(`tel:${cleanedNumber}`, '_blank');
+      setShowCallModal(false);
+      setWhatsappNumber('');
     } else {
-      alert('मोबाईल क्रमांक जतन करण्यात त्रुटी आली');
+      alert('क्रमांक जतन करण्यात त्रुटी आली');
     }
   };
 
@@ -314,6 +393,8 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
     type = 'whatsapp'
   }) => {
     if (!isOpen) return null;
+
+    const isCall = type === 'call';
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
@@ -331,25 +412,57 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
           <div className="p-6">
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                {type === 'whatsapp' ? 'व्हॉट्सअॅप क्रमांक' : 'मोबाईल क्रमांक'}
+                {isCall ? 'कॉल करण्यासाठी क्रमांक' : 'व्हॉट्सअॅप क्रमांक'}
               </label>
-              <input
-                type="tel"
-                placeholder={`10-अंकी ${type === 'whatsapp' ? 'व्हॉट्सअॅप' : 'मोबाईल'} क्रमांक`}
-                value={number}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/\D/g, '');
-                  if (value.length <= 10) {
-                    setNumber(value);
-                  }
-                }}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                maxLength="10"
-                autoFocus
-              />
+              
+              {/* Contact Import Button and Input Container */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="tel"
+                  placeholder="10-अंकी व्हॉट्सअॅप क्रमांक"
+                  value={number}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/\D/g, '');
+                    if (value.length <= 10) {
+                      setNumber(value);
+                    }
+                  }}
+                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  maxLength="10"
+                  autoFocus
+                />
+                
+                {/* Contact Import Button */}
+                {('contacts' in navigator && 'ContactsManager' in window) && (
+                  <button
+                    type="button"
+                    onClick={() => handleContactImport(type)}
+                    disabled={importingContact}
+                    className="px-4 py-3 bg-blue-100 text-blue-700 border border-blue-300 rounded-lg hover:bg-blue-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                    title="संपर्कांमधून आयात करा"
+                  >
+                    {importingContact ? (
+                      <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                    ) : (
+                      <>
+                        <FiUser className="text-lg" />
+                        <span className="hidden sm:inline text-sm font-medium">आयात</span>
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+              
               <p className="text-xs text-gray-500 mt-2">
-                हा क्रमांक डेटाबेसमध्ये जतन केला जाईल
+                हा क्रमांक <strong>voter_surveys</strong> मध्ये जतन केला जाईल
               </p>
+              
+              {/* Contact API Support Note */}
+              {!('contacts' in navigator && 'ContactsManager' in window) && (
+                <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-700">
+                  <strong>नोंद:</strong> संपर्क आयात Chrome/Edge ब्राउझरमध्ये HTTPS कनेक्शनवर उपलब्ध आहे.
+                </div>
+              )}
             </div>
 
             <div className="flex gap-3">
@@ -363,13 +476,13 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
                 onClick={onConfirm}
                 disabled={!validatePhoneNumber(number)}
                 className={`flex-1 px-4 py-2 text-white rounded-lg font-medium transition-colors ${validatePhoneNumber(number)
-                  ? type === 'whatsapp'
-                    ? 'bg-green-500 hover:bg-green-600'
-                    : 'bg-blue-500 hover:bg-blue-600'
+                  ? isCall
+                    ? 'bg-blue-500 hover:bg-blue-600'
+                    : 'bg-green-500 hover:bg-green-600'
                   : 'bg-gray-400 cursor-not-allowed'
                   }`}
               >
-                {type === 'whatsapp' ? 'व्हॉट्सअॅप वर पाठवा' : 'एसएमएस पाठवा'}
+                {isCall ? 'कॉल करा' : 'व्हॉट्सअॅप वर पाठवा'}
               </button>
             </div>
           </div>
@@ -640,7 +753,7 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
       </div>
     `;
 
-    if (isFamily && Array.isArray(familyData) && familyData.length > 0 ) {
+    if (isFamily && Array.isArray(familyData) && familyData.length > 0) {
       html += `
         <div style="text-align:center;margin-top:6px;font-size:14px;"><b>कुटुंब तपशील</b></div>
         
@@ -673,7 +786,7 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
 
       html += `
         <div style="margin-top:6px;border-top:1px solid #000;padding-top:6px;font-size:13px;">
-          मी आपला <b>${candidateInfo.name}</b> माझी निशाणी <b>${candidateInfo.electionSymbol}</b> या चिन्हावर मतदान करून मला प्रचंड बहुमतांनी विजय करा
+         ${candidateInfo.messagePrinting}
         </div>
         <div style="margin-top:6px;text-align:center;font-weight:700;">${escapeHtml(candidateInfo.name)}</div>
         <div style="margin-top:18px;text-align:center;"></div>
@@ -689,8 +802,8 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
         <div style="margin-top:4px;"><b>लिंग:</b> ${escapeHtml(voterData.gender || '')}</div>
         <div style="margin-top:4px;"><b>वय:</b> ${escapeHtml(voterData.age || '')}</div>
         <div style="margin-top:6px;margin-bottom:10px;"><b>मतदान केंद्र:</b> ${escapeHtml(voterData.pollingStationAddress || '')}</div>
-        <div style="margin-top:6px;border-top:1px solid #000;padding-top:6px;font-size:13px;">
-          मी आपला <b>${candidateInfo.name}</b> माझी निशाणी <b>${candidateInfo.electionSymbol}</b> या चिन्हावर मतदान करून मला प्रचंड बहुमतांनी विजय करा
+       <div style="margin-top:6px;border-top:1px solid #000;padding-top:6px;font-size:13px;">
+         ${candidateInfo.messagePrinting}
         </div>
         <div style="margin-top:6px;text-align:center;font-weight:700;">${escapeHtml(candidateInfo.name)}</div>
         <div style="margin-top:18px;"></div>
@@ -778,16 +891,16 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
       />
 
       <ContactModal
-        isOpen={showSMSModal}
+        isOpen={showCallModal}
         onClose={() => {
-          setShowSMSModal(false);
-          setSmsNumber('');
+          setShowCallModal(false);
+          setWhatsappNumber('');
         }}
-        title="मोबाईल क्रमांक प्रविष्ट करा"
-        number={smsNumber}
-        setNumber={setSmsNumber}
-        onConfirm={confirmSMSShare}
-        type="sms"
+        title="कॉल करण्यासाठी क्रमांक प्रविष्ट करा"
+        number={whatsappNumber}
+        setNumber={setWhatsappNumber}
+        onConfirm={confirmCall}
+        type="call"
       />
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
@@ -819,9 +932,9 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
             disabled={!voterData}
           />
           <ActionBtn
-            icon={FiMessageCircle}
-            label="SMS"
-            onClick={handleSMSShare}
+            icon={FiPhone}
+            label="Call"
+            onClick={handleCall}
             color="bg-blue-400 hover:bg-blue-500"
             disabled={!voterData}
           />

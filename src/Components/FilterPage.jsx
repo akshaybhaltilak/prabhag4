@@ -1,12 +1,12 @@
 // FilterPage.jsx
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { db } from '../Firebase/config';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import {
   FiHome, FiCheckCircle, FiPhone, FiUser, FiList,
   FiChevronRight, FiUsers, FiBarChart2, FiDownload,
   FiMap, FiMapPin, FiSearch, FiMoreVertical, FiX,
-  FiArrowLeft
+  FiArrowLeft, FiThumbsUp, FiThumbsDown
 } from 'react-icons/fi';
 import TranslatedText from './TranslatedText';
 import VoterList from './VoterList';
@@ -22,7 +22,7 @@ import { Link, useNavigate } from 'react-router-dom';
 const dbLocal = new Dexie('JanNetaaDB_v2'); // Incremented version
 dbLocal.version(2).stores({
   voters: 'voterId, name, age, gender, boothNumber, prabhag, lastUpdated',
-  voter_surveys: 'voterId, phone, whatsapp, city, education, occupation, category, issues, remarks, supportStatus, updatedAt',
+  voter_surveys: 'voterId, phone, whatsapp, city, education, occupation, category, issues, remarks, supportStatus, caste, updatedAt',
   voters_dynamic: 'voterId, updatedAt, hasVoted, supportStatus, id',
   app_cache: 'key, value, timestamp' // Added for better cache management
 });
@@ -81,6 +81,12 @@ function normalizeRecord(data = {}) {
   const hv = data.hasVoted ?? data.voted ?? data.votedStatus ?? false;
   const hasVoted = (hv === true) || (hv === 'true') || (hv === 'yes') || (hv === 1) || (hv === '1');
 
+  // Get caste from data (from voter_surveys)
+  const caste = data.caste || data.category || '';
+
+  // Get support status
+  const supportStatus = data.supportStatus || data.support || 'unknown';
+
   // Precompute transliteration and lowercase searchable fields for performance
   let nameLatin = '';
   try {
@@ -116,7 +122,8 @@ function normalizeRecord(data = {}) {
     fatherName: (data.fatherName || data.father || '').toString().trim(),
     phone,
     hasVoted,
-    supportStatus: (data.supportStatus || data.support || '').toString().toLowerCase() || 'unknown',
+    caste,
+    supportStatus,
     lastUpdated: data.lastUpdated || data.updatedAt || Date.now(),
     // Precomputed fields to speed up search
     nameLower,
@@ -197,6 +204,8 @@ const FilterPage = () => {
   const navigate = useNavigate();
   const [selectedPrabhag, setSelectedPrabhag] = useState('');
   const [selectedYadiBhag, setSelectedYadiBhag] = useState('');
+  const [selectedCaste, setSelectedCaste] = useState('');
+  const [selectedSupport, setSelectedSupport] = useState('');
   const [page, setPage] = useState(1);
   const [alphabetLetters, setAlphabetLetters] = useState(Array.from('ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')));
   const votersPerPage = 50;
@@ -214,7 +223,7 @@ const FilterPage = () => {
     { id: 'male', title: 'Male Voters', icon: FiUser, color: 'bg-orange-500', description: 'All male voters' },
     { id: 'female', title: 'Female Voters', icon: FiUser, color: 'bg-orange-500', description: 'All female voters' },
     { id: 'caste', title: 'According to Caste', icon: FiUsers, color: 'bg-orange-500', description: 'Voters grouped by caste' },
-    { id: 'support', title: 'Supporters', icon: FiUsers, color: 'bg-orange-500', description: 'Voters grouped by support status (low/medium/high)' },
+    { id: 'support', title: 'Supporters', icon: FiThumbsUp, color: 'bg-orange-500', description: 'Voters grouped by support status' },
 
     { id: 'duplicates', title: 'Duplicates', icon: FiList, color: 'bg-orange-500', description: 'Potential duplicate records' },
     { id: 'age', title: 'Age Wise', icon: FiBarChart2, color: 'bg-orange-500', description: 'Voters grouped by age ranges' },
@@ -225,6 +234,14 @@ const FilterPage = () => {
     { id: '30-49', label: '30-49', min: 30, max: 49 },
     { id: '50-59', label: '50-59', min: 50, max: 59 },
     { id: '60+', label: '60+', min: 60, max: 150 }
+  ];
+
+  // Support status options
+  const supportOptions = [
+    { id: 'supporter', label: 'Strong Supporter', icon: FiThumbsUp, color: 'bg-green-500' },
+    { id: 'medium', label: 'Medium Support', icon: FiUser, color: 'bg-yellow-500' },
+    { id: 'not-supporter', label: 'Not Supporter', icon: FiThumbsDown, color: 'bg-red-500' },
+    { id: 'unknown', label: 'Unknown', icon: FiUser, color: 'bg-gray-500' }
   ];
 
   // Handle search
@@ -315,14 +332,24 @@ const FilterPage = () => {
 
       const surveys = surveysSnap.docs.map(d => {
         const doc = d.data() || {};
-        return { ...doc, voterId: String(doc.voterId || doc.VoterId || d.id || '').trim().toUpperCase() };
+        return { 
+          ...doc, 
+          voterId: String(doc.voterId || doc.VoterId || d.id || '').trim().toUpperCase(),
+          caste: doc.caste || doc.category || '',
+          supportStatus: doc.supportStatus || 'unknown'
+        };
       });
 
       const dynamics = dynSnap.docs.map(d => {
         const doc = d.data() || {};
         const rawHv = doc.hasVoted ?? doc.voted ?? false;
         const hasVotedBool = (rawHv === true) || (rawHv === 'true') || (rawHv === 'yes') || (rawHv === 1) || (rawHv === '1');
-        return { ...doc, voterId: String(doc.voterId || doc.VoterId || d.id || '').trim().toUpperCase(), hasVoted: hasVotedBool };
+        return { 
+          ...doc, 
+          voterId: String(doc.voterId || doc.VoterId || d.id || '').trim().toUpperCase(), 
+          hasVoted: hasVotedBool,
+          supportStatus: doc.supportStatus || 'unknown'
+        };
       });
 
       await dbLocal.transaction('rw', dbLocal.voter_surveys, dbLocal.voters_dynamic, async () => {
@@ -457,21 +484,46 @@ const FilterPage = () => {
   }, [voters]);
 
   // Castes (gathered from voter_surveys + local voter.caste if present)
-  const [uniqueCastesState, setUniqueCastesState] = useState([]);
-  const [supportCounts, setSupportCounts] = useState({ low: 0, medium: 0, high: 0, supporter: 0, 'not-supporter': 0 });
+  const [uniqueCastes, setUniqueCastes] = useState([]);
+  const [casteCounts, setCasteCounts] = useState({});
+  const [supportCounts, setSupportCounts] = useState({ 
+    supporter: 0, 
+    medium: 0, 
+    'not-supporter': 0, 
+    unknown: 0 
+  });
 
   useEffect(() => {
     (async () => {
       try {
-        const s = new Set();
-        voters.forEach(v => { if (v.caste && String(v.caste).trim() !== '') s.add(String(v.caste)); });
-        const surveys = await dbLocal.voter_surveys.toArray();
-        surveys.forEach(sv => { if (sv.caste) s.add(String(sv.caste)); });
-        setUniqueCastesState(Array.from(s).sort((a, b) => a.localeCompare(b)));
+        // Get all voters with caste information
+        const allVotersWithCaste = voters.filter(v => v.caste && v.caste.trim() !== '');
+        
+        // Count castes
+        const casteMap = {};
+        allVotersWithCaste.forEach(v => {
+          const caste = v.caste.trim();
+          casteMap[caste] = (casteMap[caste] || 0) + 1;
+        });
+        
+        setCasteCounts(casteMap);
+        
+        // Get unique castes sorted
+        const casteSet = new Set(Object.keys(casteMap));
+        const uniqueCasteArray = Array.from(casteSet).sort((a, b) => a.localeCompare(b));
+        setUniqueCastes(uniqueCasteArray);
 
-        const counts = { low: 0, medium: 0, high: 0, supporter: 0, 'not-supporter': 0 };
-        surveys.forEach(sv => { const st = (sv.supportStatus || 'medium'); if (counts[st] !== undefined) counts[st]++; });
-        setSupportCounts(counts);
+        // Count support statuses
+        const supportMap = { supporter: 0, medium: 0, 'not-supporter': 0, unknown: 0 };
+        voters.forEach(v => {
+          const status = v.supportStatus || 'unknown';
+          if (supportMap[status] !== undefined) {
+            supportMap[status]++;
+          } else {
+            supportMap['unknown']++;
+          }
+        });
+        setSupportCounts(supportMap);
       } catch (e) {
         console.warn('Failed to calculate castes/support counts', e);
       }
@@ -482,16 +534,6 @@ const FilterPage = () => {
   useEffect(() => {
     const onSurveyUpdated = async () => {
       try {
-        const s = new Set(uniqueCastesState);
-        const surveys = await dbLocal.voter_surveys.toArray();
-        surveys.forEach(sv => { if (sv.caste) s.add(String(sv.caste)); });
-        setUniqueCastesState(Array.from(s).sort((a, b) => a.localeCompare(b)));
-
-        const counts = { low: 0, medium: 0, high: 0, supporter: 0, 'not-supporter': 0 };
-        surveys.forEach(sv => { const st = (sv.supportStatus || 'medium'); if (counts[st] !== undefined) counts[st]++; });
-        setSupportCounts(counts);
-
-        // Refresh merged dataset
         await fetchAndStoreDynamic();
         await refreshMerged();
       } catch (err) {
@@ -501,7 +543,7 @@ const FilterPage = () => {
 
     window.addEventListener('voter_survey_updated', onSurveyUpdated);
     return () => window.removeEventListener('voter_survey_updated', onSurveyUpdated);
-  }, [uniqueCastesState, fetchAndStoreDynamic, refreshMerged]);
+  }, [fetchAndStoreDynamic, refreshMerged]);
 
   const surnameGroups = useMemo(() => {
     const map = {};
@@ -604,9 +646,13 @@ const FilterPage = () => {
       surname: Object.keys(surnameGroups).filter(k => surnameGroups[k].length > 1).length,
       duplicates: 0,
       prabhag: uniquePrabhags.length,
-      yadibhag: uniqueYadiBhags.length
+      yadibhag: uniqueYadiBhags.length,
+      caste: uniqueCastes.length,
+      supporter: supportCounts.supporter,
+      medium: supportCounts.medium,
+      'not-supporter': supportCounts['not-supporter']
     };
-  }, [voters, uniqueBooths, surnameGroups, uniquePrabhags, uniqueYadiBhags]);
+  }, [voters, uniqueBooths, surnameGroups, uniquePrabhags, uniqueYadiBhags, uniqueCastes, supportCounts]);
 
   // Pagination - use searchFilteredVoters for display
   const totalPages = Math.max(1, Math.ceil(searchFilteredVoters.length / votersPerPage));
@@ -751,7 +797,7 @@ const FilterPage = () => {
     try {
       // Get all static voters with phone numbers
       const staticWithPhone = await dbLocal.voters.filter(v =>
-        v.phone && String(v.phone).trim() !== ''
+        v.phone || v.whatsapp && String(v.phone).trim() !== ''
       ).toArray();
 
       // Get all survey records with phone numbers
@@ -1032,37 +1078,7 @@ const FilterPage = () => {
     }
   }, []);
 
-  // Category handler with new filters
-  const handleCategorySelect = useCallback((category) => {
-    setActiveCategory(category);
-    setSelectedBooth('');
-    setSelectedAgeGroup('');
-    setSelectedSurname('');
-    setSelectedPrabhag('');
-    setSelectedYadiBhag('');
-    setPage(1);
-    setSearchTerm(''); // Clear search when changing category
-
-    if (['booth', 'age', 'surname', 'alphabet', 'prabhag', 'yadibhag'].includes(category.id)) {
-      setFilteredVoters([]);
-    } else {
-      switch (category.id) {
-        case 'voted': applyVotedFilter(); break;
-        case 'withPhone': applyPhoneFilter(); break;
-        case 'male': applyGenderFilter('male'); break;
-        case 'female': applyGenderFilter('female'); break;
-        case 'duplicates': applyDuplicatesFilter('name'); break;
-        default: setFilteredVoters(voters); break;
-      }
-    }
-  }, [applyVotedFilter, applyPhoneFilter, applyGenderFilter, applyDuplicatesFilter, voters]);
-
   // New filter handlers
-  const handlePrabhagSelect = useCallback((prabhag) => {
-    setSelectedPrabhag(prabhag);
-    applyPrabhagFilter(prabhag);
-  }, [applyPrabhagFilter]);
-
   const applyCasteFilter = useCallback(async (caste) => {
     setLoading(true);
     try {
@@ -1076,7 +1092,7 @@ const FilterPage = () => {
         } catch (e) {
           // fallback scan
           const all = await dbLocal.voter_surveys.toArray();
-          surveys = all.filter(s => (s.caste || '').toString().toLowerCase().includes(String(caste).toLowerCase()));
+          surveys = all.filter(s => (s.caste || '').toString().toLowerCase() === String(caste).toLowerCase());
         }
 
         const ids = surveys.map(s => String(s.voterId || s.id || '').trim().toUpperCase()).filter(Boolean);
@@ -1085,7 +1101,7 @@ const FilterPage = () => {
         const merged = mergeStaticWithDynamic(staticRecords, surveys, dynamics);
         setFilteredVoters(merged);
       }
-      setSelectedSurname('');
+      setSelectedCaste(caste || '');
       setPage(1);
       setSearchTerm('');
     } catch (err) {
@@ -1118,6 +1134,7 @@ const FilterPage = () => {
           setFilteredVoters(merged);
         }
       }
+      setSelectedSupport(supportKey || '');
       setPage(1);
       setSearchTerm('');
     } catch (err) {
@@ -1129,15 +1146,50 @@ const FilterPage = () => {
     }
   }, [voters, getStaticByIds]);
 
+  const handlePrabhagSelect = useCallback((prabhag) => {
+    setSelectedPrabhag(prabhag);
+    applyPrabhagFilter(prabhag);
+  }, [applyPrabhagFilter]);
+
   const handleYadiBhagSelect = useCallback((yadiBhag) => {
     setSelectedYadiBhag(yadiBhag);
     applyYadiBhagFilter(yadiBhag);
   }, [applyYadiBhagFilter]);
 
+  // Category handler with new filters
+  const handleCategorySelect = useCallback((category) => {
+    setActiveCategory(category);
+    setSelectedBooth('');
+    setSelectedAgeGroup('');
+    setSelectedSurname('');
+    setSelectedPrabhag('');
+    setSelectedYadiBhag('');
+    setSelectedCaste('');
+    setSelectedSupport('');
+    setPage(1);
+    setSearchTerm(''); // Clear search when changing category
+
+    if (['booth', 'age', 'surname', 'alphabet', 'prabhag', 'yadibhag', 'caste', 'support'].includes(category.id)) {
+      setFilteredVoters([]);
+    } else {
+      switch (category.id) {
+        case 'voted': applyVotedFilter(); break;
+        case 'withPhone': applyPhoneFilter(); break;
+        case 'male': applyGenderFilter('male'); break;
+        case 'female': applyGenderFilter('female'); break;
+        case 'duplicates': applyDuplicatesFilter('name'); break;
+        default: setFilteredVoters(voters); break;
+      }
+    }
+  }, [applyVotedFilter, applyPhoneFilter, applyGenderFilter, applyDuplicatesFilter, voters]);
+
   // Existing handlers
   const handleAgeGroupSelect = useCallback((gId) => { setSelectedAgeGroup(gId); applyAgeFilter(gId); }, [applyAgeFilter]);
   const handleBoothSelect = useCallback((b) => { setSelectedBooth(b); applyBoothFilter(b); }, [applyBoothFilter]);
   const handleSurnameSelect = useCallback((s) => { setSelectedSurname(s); applySurnameList(s); }, [applySurnameList]);
+  const handleCasteSelect = useCallback((caste) => { setSelectedCaste(caste); applyCasteFilter(caste); }, [applyCasteFilter]);
+  const handleSupportSelect = useCallback((support) => { setSelectedSupport(support); applySupportFilter(support); }, [applySupportFilter]);
+  const handleAlphabetSelect = useCallback((letter) => { applyAlphabetFilter(letter); }, [applyAlphabetFilter]);
 
   // Bulk actions for a surname group (export, open bulk survey UI placeholder)
   const exportSurnameList = useCallback(async (surname) => {
@@ -1164,7 +1216,9 @@ const FilterPage = () => {
         'Gender': v.gender,
         'Booth': v.boothNumber,
         'Phone': v.phone,
-        'Voted': v.hasVoted ? 'Yes' : 'No'
+        'Voted': v.hasVoted ? 'Yes' : 'No',
+        'Caste': v.caste || '',
+        'Support Status': v.supportStatus || ''
       }));
 
       const ws = XLSX.utils.json_to_sheet(exportData);
@@ -1178,13 +1232,6 @@ const FilterPage = () => {
     }
   }, [surnameGroups]);
 
-  const openBulkSurveyUI = useCallback((surname) => {
-    const group = surnameGroups[surname] || [];
-    // Navigate to dedicated bulk survey page and pass the surname and voters
-    navigate('/bulk-survey', { state: { surname, voters: group } });
-  }, [surnameGroups, navigate]);
-  const handleAlphabetSelect = useCallback((letter) => { applyAlphabetFilter(letter); }, [applyAlphabetFilter]);
-
   // Fixed Export function with consistent format and new password
   const handleExportExcel = useCallback(async () => {
     const dataToExport = searchTerm ? searchFilteredVoters : filteredVoters;
@@ -1195,7 +1242,7 @@ const FilterPage = () => {
 
     // Use the new password
     const password = prompt('Enter password to export data:');
-    if (password !== 'admin123') {
+    if (password !== 'Jannetaa9881') {
       alert('Incorrect password!');
       return;
     }
@@ -1215,8 +1262,9 @@ const FilterPage = () => {
       'Village': v.village || '',
       'Father Name': v.fatherName || '',
       'Phone': v.phone || '',
+      'Caste': v.caste || '',
+      'Support Status': v.supportStatus || '',
       'Voted': v.hasVoted ? 'Yes' : 'No',
-      'Support Status': v.supportStatus || 'unknown',
       'Last Updated': v.lastUpdated ? new Date(v.lastUpdated).toLocaleDateString() : ''
     }));
 
@@ -1242,8 +1290,6 @@ const FilterPage = () => {
     }
   }, [filteredVoters, searchFilteredVoters, searchTerm, activeCategory]);
 
-
-
   // Quick search suggestions
   const quickSearchSuggestions = useMemo(() => {
     const suggestions = new Set();
@@ -1265,8 +1311,13 @@ const FilterPage = () => {
       }
     });
 
+    // Add some common castes
+    uniqueCastes.slice(0, 5).forEach(caste => {
+      if (caste) suggestions.add(caste);
+    });
+
     return Array.from(suggestions);
-  }, [uniqueBooths, uniquePrabhags, surnameGroups]);
+  }, [uniqueBooths, uniquePrabhags, surnameGroups, uniqueCastes]);
 
   // Data loading status
   const dataStatus = useMemo(() => {
@@ -1366,6 +1417,8 @@ const FilterPage = () => {
                       setSelectedSurname('');
                       setSelectedPrabhag('');
                       setSelectedYadiBhag('');
+                      setSelectedCaste('');
+                      setSelectedSupport('');
                       setFilteredVoters(voters);
                       setSearchTerm('');
                       setPage(1);
@@ -1438,21 +1491,53 @@ const FilterPage = () => {
               </div>
             )}
 
-            {activeCategory.id === 'caste' && (
+            {activeCategory.id === 'caste' && !selectedCaste && (
               <div className="space-y-2">
                 <h4 className="text-sm font-medium text-gray-700 px-1">Select Caste</h4>
                 <div className="space-y-2">
-                  {uniqueCastesState.map(caste => {
-                    const count = voters.filter(v => (v.caste || '').toLowerCase() === (caste || '').toLowerCase()).length || 0;
+                  {uniqueCastes.map(caste => {
+                    const count = casteCounts[caste] || 0;
+                    const votedCount = voters.filter(v => v.caste === caste && v.hasVoted).length;
                     return (
-                      <button key={caste} onClick={() => applyCasteFilter(caste)} className="w-full bg-white p-3 rounded-lg border border-gray-200 hover:border-indigo-300 transition-colors text-left">
+                      <button key={caste} onClick={() => handleCasteSelect(caste)} 
+                        className="w-full bg-white p-3 rounded-lg border border-gray-200 hover:border-indigo-300 transition-colors text-left">
                         <div className="flex justify-between items-center">
                           <div className="flex-1 min-w-0">
-                            <div className="font-medium text-gray-800 text-sm">{caste}</div>
-                            <div className="text-xs text-gray-500">{count} voters</div>
+                            <div className="font-medium text-gray-800 text-sm"><TranslatedText>{caste}</TranslatedText></div>
+                            <div className="text-xs text-gray-500"><TranslatedText>Total : {count}</TranslatedText></div>
                           </div>
                           <FiChevronRight className="text-gray-400 text-sm flex-shrink-0 ml-2" />
                         </div>
+                      </button>
+                    );
+                  })}
+                  {uniqueCastes.length === 0 && (
+                    <div className="text-center py-4">
+                      <div className="text-gray-300 text-3xl mb-2">📊</div>
+                      <p className="text-gray-500 text-sm">No caste data available</p>
+                      <p className="text-gray-400 text-xs mt-1">Add caste information in voter surveys</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeCategory.id === 'support' && !selectedSupport && (
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-gray-700 px-1">Support Level</h4>
+                <div className="grid grid-cols-2 gap-2">
+                  {supportOptions.map(option => {
+                    const IconComponent = option.icon;
+                    const count = supportCounts[option.id] || 0;
+                    const votedCount = voters.filter(v => v.supportStatus === option.id && v.hasVoted).length;
+                    return (
+                      <button key={option.id} onClick={() => handleSupportSelect(option.id)} 
+                        className="w-full bg-white p-3 rounded-lg border border-gray-200 hover:border-indigo-300 transition-colors text-center">
+                        <div className={`${option.color} w-8 h-8 rounded-lg flex items-center justify-center mx-auto mb-2`}>
+                          <IconComponent className="text-white text-sm" />
+                        </div>
+                        <div className="font-medium text-gray-800 text-sm capitalize"><TranslatedText>{option.label}</TranslatedText></div>
+                        <div className="text-xs text-gray-500"><TranslatedText>Total: {count}</TranslatedText></div>
                       </button>
                     );
                   })}
@@ -1460,19 +1545,6 @@ const FilterPage = () => {
               </div>
             )}
 
-            {activeCategory.id === 'support' && (
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium text-gray-700 px-1">Supporters</h4>
-                <div className="grid grid-cols-2 gap-2">
-                  {['low', 'medium', 'high', 'supporter', 'not-supporter'].map(s => (
-                    <button key={s} onClick={() => applySupportFilter(s)} className="w-full bg-white p-3 rounded-lg border border-gray-200 hover:border-indigo-300 transition-colors text-center">
-                      <div className="font-medium text-gray-800 text-sm capitalize">{s}</div>
-                      <div className="text-xs text-gray-500">{(supportCounts[s] || 0)} voters</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
             {activeCategory.id === 'yadibhag' && !selectedYadiBhag && (
               <div className="space-y-2">
                 <h4 className="text-sm font-medium text-gray-700 px-1">Select Yadi Bhag Address:</h4>
@@ -1485,8 +1557,8 @@ const FilterPage = () => {
                         className="w-full bg-white p-3 rounded-lg border border-gray-200 hover:border-indigo-300 transition-colors text-left">
                         <div className="flex justify-between items-center">
                           <div className="flex-1 min-w-0">
-                            <div className="font-medium text-gray-800 text-sm truncate">{yadiBhag}</div>
-                            <div className="text-xs text-gray-500">{yadiVotersCount} voters • {votedCount} voted</div>
+                            <div className="font-medium text-gray-800 text-sm truncate"><TranslatedText>{yadiBhag}</TranslatedText></div>
+                            <div className="text-xs text-gray-500"><TranslatedText>Total: {yadiVotersCount}</TranslatedText></div>
                           </div>
                           <FiChevronRight className="text-gray-400 text-sm flex-shrink-0 ml-2" />
                         </div>
@@ -1520,7 +1592,7 @@ const FilterPage = () => {
 
             {activeCategory.id === 'age' && !selectedAgeGroup && (
               <div className="space-y-2">
-                <h4 className="text-sm font-medium text-gray-700 px-1">Choose Age Group</h4>
+                <h4 className="text-sm font-medium text-gray-700 px-1"><TranslatedText>Choose Age Group</TranslatedText></h4>
                 <div className="grid grid-cols-2 gap-2">
                   {ageGroups.map(group => {
                     const groupVotersCount = voters.filter(v => v.age >= group.min && v.age <= group.max).length;
@@ -1528,9 +1600,9 @@ const FilterPage = () => {
                     return (
                       <button key={group.id} onClick={() => handleAgeGroupSelect(group.id)}
                         className="bg-white p-3 rounded-lg border border-gray-200 hover:border-blue-300 transition-colors text-center">
-                        <div className="font-medium text-gray-800 text-sm">{group.label}</div>
-                        <div className="text-xs text-gray-500">{groupVotersCount} voters</div>
-                        <div className="text-xs text-green-500">{votedCount} voted</div>
+                        <div className="font-medium text-gray-800 text-sm"><TranslatedText>{group.label}</TranslatedText></div>
+                        <div className="text-xs text-gray-500"><TranslatedText>Total: {groupVotersCount}</TranslatedText></div>
+                        <div className="text-xs text-green-500"><TranslatedText>{votedCount} voted</TranslatedText></div>
                       </button>
                     );
                   })}
@@ -1540,7 +1612,7 @@ const FilterPage = () => {
 
             {activeCategory.id === 'surname' && !selectedSurname && (
               <div className="space-y-2">
-                <h4 className="text-sm font-medium text-gray-700 px-1">Choose Surname</h4>
+                <h4 className="text-sm font-medium text-gray-700 px-1"><TranslatedText>Choose Surname</TranslatedText></h4>
                 <div className="space-y-2">
                   {/* Surname search input */}
                   <div className="relative">
@@ -1553,14 +1625,14 @@ const FilterPage = () => {
                   <div className="space-y-2 h-auto overflow-y-auto">
                     {currentSurnameKeys.map((surname) => {
                       const surnameVoters = surnameGroups[surname] || [];
+                      const votedCount = surnameVoters.filter(v => v.hasVoted).length;
                       return (
                         <div key={surname} className="w-full bg-white p-3 rounded-lg border border-gray-200 hover:border-indigo-300 transition-colors flex items-center justify-between">
                           <button onClick={() => handleSurnameSelect(surname)} className="text-left flex-1">
                             <div className="font-medium text-gray-800 text-sm">{surname === 'Unknown' ? 'Unknown Surname' : surname}</div>
-                            <div className="text-xs text-gray-500">{surnameVoters.length} people with this surname</div>
+                            <div className="text-xs text-gray-500"><TranslatedText>Total: {surnameVoters.length} | </TranslatedText> <TranslatedText>{votedCount} voted</TranslatedText></div>
                           </button>
                           <div className="flex items-center gap-2 ml-3">
-
                             <button onClick={() => { const group = surnameGroups[surname] || []; setBulkModalSurname(surname); setBulkModalVoters(group); setBulkModalOpen(true); }} className="p-2 text-gray-500 hover:text-gray-800">
                               <FiMoreVertical />
                             </button>
@@ -1589,7 +1661,7 @@ const FilterPage = () => {
               </div>
             )}
 
-            {activeCategory.id === 'alphabet' && (
+            {activeCategory.id === 'alphabet' && !selectedSupport && !selectedCaste && (
               <div className="space-y-2">
                 <h4 className="text-sm font-medium text-gray-700 px-1">Alphabet groups (A → Z)</h4>
                 <div className="flex flex-wrap gap-2">
@@ -1604,8 +1676,8 @@ const FilterPage = () => {
             )}
 
             {/* Voter list - Show when we have selected filters or direct categories */}
-            {(selectedBooth || selectedAgeGroup || selectedSurname || selectedPrabhag || selectedYadiBhag ||
-              (activeCategory.id && !['booth', 'age', 'surname', 'alphabet', 'prabhag', 'yadibhag'].includes(activeCategory.id)) ||
+            {(selectedBooth || selectedAgeGroup || selectedSurname || selectedPrabhag || selectedYadiBhag || selectedCaste || selectedSupport ||
+              (activeCategory.id && !['booth', 'age', 'surname', 'alphabet', 'prabhag', 'yadibhag', 'caste', 'support'].includes(activeCategory.id)) ||
               (activeCategory.id === 'alphabet' && filteredVoters.length > 0)) && (
                 <>
                   {loading ? (
@@ -1647,7 +1719,7 @@ const FilterPage = () => {
                 </>
               )}
 
-            {searchFilteredVoters.length === 0 && !loading && !['surname', 'alphabet', 'prabhag', 'yadibhag'].includes(activeCategory.id) && (
+            {searchFilteredVoters.length === 0 && !loading && !['surname', 'alphabet', 'prabhag', 'yadibhag', 'caste', 'support'].includes(activeCategory.id) && (
               <div className="text-center py-8">
                 <div className="text-gray-300 text-4xl mb-2">📝</div>
                 <p className="text-gray-500 text-sm">No voters found {searchTerm ? `matching "${searchTerm}"` : 'in this category'}</p>
@@ -1679,4 +1751,3 @@ const FilterPage = () => {
 };
 
 export default FilterPage;
-

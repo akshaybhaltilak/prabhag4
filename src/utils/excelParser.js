@@ -33,6 +33,7 @@ export const parseExcelFile = (file) => {
           marathi_surname: row.marathi_surname || row["Marathi_Surname"] || "",
           english_surname: row.english_surname || row["English_Surname"] || "",
           voterNameEng: row.voterNameEng || row["Voter_Name_English"] || "",
+          whatsapp: row.whatsapp || row["Phone Number"] || "",
           boothNumber:
             row.boothNumber || row["Booth Number"] || row.booth || "",
           prabhag:

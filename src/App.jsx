@@ -13,7 +13,6 @@ import FullVoterDetails from './Components/FullVoterDetails';
 import Team from './Components/Team';
 import Contactus from './Components/Contactus';
 import Setting from './Components/Setting';
-import NewSurvey from './Components/NewSurvey';
 import BulkSurvey from './Pages/BulkSurvey';
 import { VoterProvider } from './Context/VoterContext';
 import usePendingSync from './hooks/usePendingSync';
@@ -22,6 +21,8 @@ import { CandidateProvider, useCandidate } from './Context/CandidateContext';
 import Login from './Pages/Login';
 import WhatsAppShare from './Components/WhatsAppShare';
 import Reports from './Components/Reports';
+import ElectoralFlyerService from './Components/ElectoralFlyerService';
+import { GrUpdate } from 'react-icons/gr';
 
 // Clear Site Data Function
 const clearSiteData = async () => {
@@ -109,10 +110,10 @@ const ClearDataButton = ({ mobile = false }) => {
       <button
         onClick={handleClearData}
         disabled={isClearing}
-        className="w-full flex items-center gap-3 text-md px-4 py-3 rounded-xl text-base bg-red-500 font-medium text-white hover:bg-red-50 hover:text-red-700 transition-all duration-200 disabled:opacity-50"
+        className="w-full flex items-center gap-3 text-md px-4 py-3 rounded-xl text-base bg-green-500 font-medium text-white hover:bg-green-50 hover:text-green-700 transition-all duration-200 disabled:opacity-50"
       >
-        <Trash2 className="w-5 h-5" />
-        <span><TranslatedText>Clear All Data</TranslatedText></span>
+        <GrUpdate className="w-5 h-5" />
+        <span><TranslatedText>Update App</TranslatedText></span>
       </button>
     );
   }
@@ -121,15 +122,15 @@ const ClearDataButton = ({ mobile = false }) => {
     <button
       onClick={handleClearData}
       disabled={isClearing}
-      className="flex items-center gap-2 px-3 py-2 rounded-lg border border-red-200 hover:border-red-300 bg-white hover:bg-red-50 text-red-600 hover:text-red-700 transition-all duration-200 shadow-sm disabled:opacity-50"
+      className="flex items-center gap-2 px-3 py-2 rounded-lg border border-green-200 hover:border-green-300 bg-white hover:bg-green-50 text-green-600 hover:text-green-700 transition-all duration-200 shadow-sm disabled:opacity-50"
       title="Clear all site data and reload"
     >
       {isClearing ? (
         <RefreshCw className="w-4 h-4 animate-spin" />
       ) : (
-        <Trash2 className="w-4 h-4" />
+        <GrUpdate className="w-4 h-4" />
       )}
-      <span className="text-sm font-medium">{isClearing ? 'Clearing...' : 'Clear Data'}</span>
+      <span className="text-sm font-medium">{isClearing ? 'Updating...' : 'Update App'}</span>
     </button>
   );
 };
@@ -146,7 +147,7 @@ const Navigation = ({ currentLanguage, languages, changeLanguage, translating, m
     { name: 'Search', path: '/search', icon: '' },
     { name: 'Booth', path: '/booths', icon: '' },
     { name: 'Lists', path: '/lists', icon: '' },
-    { name: 'Survey', path: '/new-survey', icon: '' },
+    { name: 'slip', path: '/slip', icon: '' },
     { name: 'Reports', path: '/reports', icon: '' },
     { name: 'Contact', path: '/contact', icon: '' },
   ];
@@ -520,6 +521,14 @@ function App() {
                   }
                 />
                 <Route
+                  path="/slip"
+                  element={
+                    <ProtectedRoute isAuthenticated={isAuthenticated}>
+                      <ElectoralFlyerService />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
                   path="/lists"
                   element={
                     <ProtectedRoute isAuthenticated={isAuthenticated}>
@@ -540,14 +549,6 @@ function App() {
                   element={
                     <ProtectedRoute isAuthenticated={isAuthenticated}>
                       <Contactus />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
-                  path="/survey"
-                  element={
-                    <ProtectedRoute isAuthenticated={isAuthenticated}>
-                      <NewSurvey />
                     </ProtectedRoute>
                   }
                 />
@@ -575,14 +576,7 @@ function App() {
                     </ProtectedRoute>
                   }
                 />
-                <Route
-                  path="/new-survey"
-                  element={
-                    <ProtectedRoute isAuthenticated={isAuthenticated}>
-                      <NewSurvey />
-                    </ProtectedRoute>
-                  }
-                />
+
                 <Route
                   path="/reports"
                   element={
