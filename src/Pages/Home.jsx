@@ -9,8 +9,8 @@ const BannerSlider = ({ images }) => {
   const bannerImages = images || [
     // 'https://res.cloudinary.com/dkrslpxmh/image/upload/v1766151106/WhatsApp_Image_2025-12-19_at_6.44.37_PM_lypwv7.jpg',
     // 'https://res.cloudinary.com/dkrslpxmh/image/upload/v1766151106/WhatsApp_Image_2025-12-19_at_6.44.16_PM_gvtojn.jpg',
-    'https://as2.ftcdn.net/v2/jpg/06/82/08/31/1000_F_682083174_zbN1P24Idhlb4wGZPpluVGLcuzolQLfB.jpg',
-    'https://www.shutterstock.com/image-vector/lok-sabha-election-india-creative-260nw-2469292057.jpg'
+    'https://res.cloudinary.com/dkrslpxmh/image/upload/v1766151106/WhatsApp_Image_2025-12-19_at_6.44.37_PM_lypwv7.jpg',
+    'https://res.cloudinary.com/dkrslpxmh/image/upload/v1766151106/WhatsApp_Image_2025-12-19_at_6.44.16_PM_gvtojn.jpg',
   ];
 
   const [index, setIndex] = useState(0);
