@@ -32,7 +32,7 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
   const { candidateInfo } = useCandidate();
 
   // Website URL - update this with your actual domain
-  const WEBSITE_URL = "https://webreich.vercel.app/";
+  const WEBSITE_URL = "https://prabhag4-bjp.vercel.app/";
 
   useEffect(() => {
     // Initialize from global connection state
@@ -297,7 +297,7 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
     }
 
     message += `${safeString(candidateInfo.messageWhatsapp)}`
-    message += `📍 *अधिक माहितीसाठी भेट द्या:* ${WEBSITE_URL}`;
+    message += `${WEBSITE_URL}`;
 
     return message;
   };

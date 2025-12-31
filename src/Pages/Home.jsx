@@ -9,8 +9,8 @@ const BannerSlider = ({ images }) => {
   const bannerImages = images || [
     // 'https://res.cloudinary.com/dkrslpxmh/image/upload/v1766151106/WhatsApp_Image_2025-12-19_at_6.44.37_PM_lypwv7.jpg',
     // 'https://res.cloudinary.com/dkrslpxmh/image/upload/v1766151106/WhatsApp_Image_2025-12-19_at_6.44.16_PM_gvtojn.jpg',
-    'https://res.cloudinary.com/dkrslpxmh/image/upload/v1766151106/WhatsApp_Image_2025-12-19_at_6.44.37_PM_lypwv7.jpg',
-    'https://res.cloudinary.com/dkrslpxmh/image/upload/v1766151106/WhatsApp_Image_2025-12-19_at_6.44.16_PM_gvtojn.jpg',
+    '/m1.jpeg',
+    '/m2.jpeg',
   ];
 
   const [index, setIndex] = useState(0);
@@ -22,7 +22,7 @@ const BannerSlider = ({ images }) => {
 
   return (
     <div className="w-full max-w-5xl mx-auto mt-5 mb-4 px-4">
-      <div className="relative h-50 rounded-md overflow-hidden shadow-sm bg-gray-800/10">
+      <div className="relative h-55 rounded-md overflow-hidden shadow-sm bg-gray-800/10">
         {bannerImages.map((src, i) => (
           <img
             key={i}

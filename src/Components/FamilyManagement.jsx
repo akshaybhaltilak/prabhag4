@@ -37,6 +37,7 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
   const [pendingSyncItems, setPendingSyncItems] = useState([]);
   const [availableVoters, setAvailableVoters] = useState([]);
   const [filteredVoters, setFilteredVoters] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const loadingRef = useRef(false);
   const modalDebounceRef = useRef(null);
@@ -178,14 +179,30 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
     const loadData = async () => {
       try {
         console.log('🔄 Loading data for voter:', currentVoterId);
+        setIsLoading(true);
 
         // Load base voter data
         const voterRef = doc(db, 'voters', String(currentVoterId));
         const voterSnap = await getDoc(voterRef);
 
-        const baseData = voterSnap.exists()
-          ? { ...voterSnap.data(), id: voterSnap.id }
-          : { ...(voter || {}), id: currentVoterId };
+        let baseData = {};
+        if (voterSnap.exists()) {
+          baseData = { ...voterSnap.data(), id: voterSnap.id };
+        } else if (voter) {
+          baseData = { 
+            id: currentVoterId,
+            name: voter.name || 'Unknown',
+            voterId: voter.voterId || currentVoterId,
+            serialNumber: voter.serialNumber || '',
+            gender: voter.gender || '',
+            age: voter.age || '',
+            boothNumber: voter.boothNumber || '',
+            pollingStationAddress: voter.pollingStationAddress || '',
+            ...voter 
+          };
+        } else {
+          baseData = { id: currentVoterId, name: 'Unknown' };
+        }
 
         // Load survey data (family members and WhatsApp)
         const surveyData = await loadSurveyDoc(currentVoterId);
@@ -204,16 +221,21 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
         console.log('👨‍👩‍👧‍👦 Final family members:', familyMembersArray);
 
         if (!cancelled) {
-          setVoterData({
+          const finalVoterData = {
             ...baseData,
             familyMembers: familyMembersArray,
             whatsapp: surveyData?.whatsapp || ''
-          });
+          };
+          setVoterData(finalVoterData);
           setFamilyMembers(familyMembersArray);
+          setIsLoading(false);
         }
 
       } catch (err) {
         console.error('❌ Error loading voter data:', err);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     };
 
@@ -438,34 +460,48 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
   const generateFamilyWhatsAppMessage = () => {
     if (!voterData || !familyMembers.length) return '';
 
+    // Safely get voter details with fallbacks
+    const voterName = voterData?.name || 'Unknown';
+    const voterSerial = voterData?.serialNumber || 'N/A';
+    const voterId = voterData?.voterId || currentVoterId || 'N/A';
+    const voterBooth = voterData?.boothNumber || 'N/A';
+    const voterGender = voterData?.gender || 'N/A';
+    const voterAge = voterData?.age || 'N/A';
+    const voterStation = voterData?.pollingStationAddress || 'N/A';
+
     let message = `*${candidateInfo?.party || ''}*\n`;
     message += `*${candidateInfo?.name || ''}*\n\n`;
 
     message += `*कुटुंब तपशील*\n\n`;
-    message += `*1) ${voterData.name}*\n`;
-    message += `अनुक्रमांक: ${voterData.serialNumber || 'N/A'}\n`;
-    message += `मतदार आयडी: ${voterData.voterId || 'N/A'}\n`;
-    message += `बूथ क्र.: ${voterData.boothNumber || 'N/A'}\n`;
-    message += `लिंग: ${voterData.gender || 'N/A'}\n`;
-    message += `वय: ${voterData.age || 'N/A'}\n`;
-    message += `मतदान केंद्र: ${voterData.pollingStationAddress || 'N/A'}\n\n`;
+    message += `*1) ${voterName}*\n`;
+    message += `अनुक्रमांक: ${voterSerial}\n`;
+    message += `मतदार आयडी: ${voterId}\n`;
+    message += `बूथ क्र.: ${voterBooth}\n`;
+    message += `लिंग: ${voterGender}\n`;
+    message += `वय: ${voterAge}\n`;
+    message += `मतदान केंद्र: ${voterStation}\n\n`;
 
     familyMembers.forEach((member, index) => {
-      message += `*${index + 2}) ${member.name}*\n`;
+      message += `*${index + 2}) ${member.name || 'Unknown'}*\n`;
       message += `अनुक्रमांक: ${member.serialNumber || 'N/A'}\n`;
-      message += `मतदार आयडी: ${member.voterId || 'N/A'}\n`;
+      message += `मतदार आयडी: ${member.voterId || member.id || 'N/A'}\n`;
       message += `बूथ क्र.: ${member.boothNumber || 'N/A'}\n`;
       message += `लिंग: ${member.gender || 'N/A'}\n`;
       message += `वय: ${member.age || 'N/A'}\n`;
       message += `मतदान केंद्र: ${member.pollingStationAddress || 'N/A'}\n\n`;
     });
 
-    message += `मी आपला *${candidateInfo?.name || ''}* माझी निशाणी *${candidateInfo?.electionSymbol || ''}* या चिन्हावर मतदान करून मला प्रचंड बहुमतांनी विजय करा\n\n`;
+    message += `भारतीय जनता पक्षाचे अधिकृत उमेदवार  यांना भारतीय जनता पक्षाच्या(कमळ) चिन्हावर  मतदान करून प्रचंड बहुमतांनी विजयी करा.\n*आपले उमेदवार:*\n(अ) संदीप रामकृष्ण शेगोकर\n(ब) सौ. शिल्पा किशोर वारोकार\n(क) पल्लवी शिवाजीराव मोरे (गावंडे)\n(ड) मिलिंद उर्फ बाळू राऊत\n`;
 
     return message;
   };
 
   const handleWhatsAppShare = async () => {
+    if (isLoading || !voterData) {
+      alert('Voter data is still loading. Please wait...');
+      return;
+    }
+
     if (familyMembers.length === 0) {
       alert('No family members to share.');
       return;
@@ -505,6 +541,12 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
     console.log('👨 Main voter details:', voterData);
     console.log('👨‍👩‍👧‍👦 Current family members:', familyMembers);
 
+    // Check if data is still loading
+    if (isLoading) {
+      alert('Voter data is still loading. Please wait...');
+      return;
+    }
+
     // Check if we have valid voter data
     if (!voterData) {
       alert('No voter data found to print.');
@@ -519,7 +561,7 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
 
     // Validate that family members have required data
     const validFamilyMembers = familyMembers.filter(member =>
-      member && member.voterId && member.name
+      member && (member.voterId || member.id) && member.name
     );
 
     if (validFamilyMembers.length === 0) {
@@ -532,19 +574,22 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
     try {
       setPrinting(true);
 
+      // Safely get main voter details with fallbacks
+      const mainVoter = {
+        name: voterData.name || 'Unknown',
+        voterId: voterData.voterId || currentVoterId || 'N/A',
+        serialNumber: voterData.serialNumber || 'N/A',
+        boothNumber: voterData.boothNumber || 'N/A',
+        gender: voterData.gender || 'N/A',
+        age: voterData.age || 'N/A',
+        pollingStationAddress: voterData.pollingStationAddress || 'N/A'
+      };
+
       // Prepare complete family data including main voter
       const completeFamilyData = {
-        mainVoter: {
-          name: voterData.name || 'N/A',
-          voterId: voterData.voterId || 'N/A',
-          serialNumber: voterData.serialNumber || 'N/A',
-          boothNumber: voterData.boothNumber || 'N/A',
-          gender: voterData.gender || 'N/A',
-          age: voterData.age || 'N/A',
-          pollingStationAddress: voterData.pollingStationAddress || 'N/A'
-        },
+        mainVoter,
         familyMembers: validFamilyMembers,
-        candidateInfo: candidateInfo,
+        candidateInfo: candidateInfo || {},
         totalMembers: validFamilyMembers.length + 1,
         printDate: new Date().toLocaleString()
       };
@@ -800,7 +845,7 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
                   <div class="member-details">
                     <div class="detail-item">
                       <span class="detail-label">Voter ID</span>
-                      <span class="detail-value">${member.voterId || 'N/A'}</span>
+                      <span class="detail-value">${member.voterId || member.id || 'N/A'}</span>
                     </div>
                     <div class="detail-item">
                       <span class="detail-label">Serial Number</span>
@@ -908,6 +953,14 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
 
   return (
     <div className="space-y-6">
+      {/* Loading State */}
+      {isLoading && (
+        <div className="text-center py-8">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
+          <p className="mt-2 text-gray-600">Loading voter data...</p>
+        </div>
+      )}
+
       {/* Pending Sync Banner */}
       {pendingSyncItems.length > 0 && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 flex justify-between items-center">
@@ -942,11 +995,11 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
           </div>
 
           <div className="flex items-center gap-3 flex-wrap justify-center">
-            {familyMembers.length > 0 && (
+            {familyMembers.length > 0 && !isLoading && (
               <>
                 <button
                   onClick={printFamilyViaBluetooth}
-                  disabled={printing}
+                  disabled={printing || isLoading}
                   title={printing ? 'Printing...' : 'Print Family'}
                   className="flex items-center gap-2 bg-blue-500 hover:bg-blue-600 text-white px-4 py-3 rounded-xl transition-all duration-300 disabled:opacity-50 shadow-lg hover:shadow-xl transform hover:scale-105"
                 >
@@ -955,8 +1008,9 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
                 </button>
                 <button
                   onClick={handleWhatsAppShare}
+                  disabled={isLoading}
                   title="Share via WhatsApp"
-                  className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-4 py-3 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
+                  className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-4 py-3 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 disabled:opacity-50"
                 >
                   <FaWhatsapp className="text-lg" />
                   <span className="font-semibold"><TranslatedText>Share via WhatsApp</TranslatedText></span>
@@ -965,7 +1019,8 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
             )}
             <button
               onClick={() => setShowFamilyModal(true)}
-              className="flex items-center gap-2 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white px-4 py-3 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
+              disabled={isLoading}
+              className="flex items-center gap-2 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white px-4 py-3 rounded-xl transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105 disabled:opacity-50"
             >
               <FiPlus className="text-lg" />
               <span className="font-semibold"><TranslatedText>Add Family</TranslatedText></span>
@@ -975,19 +1030,21 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
       </div>
 
       {/* Family Members List */}
-      <div className="bg-white rounded-xl mt-5">
-        <div className="flex flex-col items-center justify-between mb-4">
-          <h3 className="text-xl font-semibold text-gray-900">
-            <TranslatedText>Family Members</TranslatedText> ({familyMembers.length})
-          </h3>
-          {familyMembers.length > 0 && (
-            <div className="text-sm text-gray-500">
-              <TranslatedText>Total {familyMembers.length + 1} family members including primary voter</TranslatedText>
-            </div>
-          )}
+      {!isLoading && (
+        <div className="bg-white rounded-xl mt-5">
+          <div className="flex flex-col items-center justify-between mb-4">
+            <h3 className="text-xl font-semibold text-gray-900">
+              <TranslatedText>Family Members</TranslatedText> ({familyMembers.length})
+            </h3>
+            {familyMembers.length > 0 && (
+              <div className="text-sm text-gray-500">
+                <TranslatedText>Total {familyMembers.length + 1} family members including primary voter</TranslatedText>
+              </div>
+            )}
+          </div>
+          <EnhancedVoterList voters={familyMembers} onRemove={removeFamilyMember} />
         </div>
-        <EnhancedVoterList voters={familyMembers} onRemove={removeFamilyMember} />
-      </div>
+      )}
 
       {/* Bluetooth Printer Component */}
       <div className='hidden'>
@@ -1043,10 +1100,6 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
                   </button>
                 )}
               </div>
-              {/* <div className="text-xs text-gray-500 mt-2 flex items-center gap-2">
-                <span>🔍</span>
-                <TranslatedText>Search will look in Marathi and English names, voter IDs, English transliterations and surname fields.</TranslatedText>
-              </div> */}
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3 bg-gray-50">
@@ -1104,10 +1157,6 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
             </div>
 
             <div className="p-4 border-t border-gray-200 flex justify-center items-center text-sm text-gray-600 bg-white">
-              {/* <span className="font-medium">
-                Showing {paginatedVoters.length} of {filteredVoters.length} voters
-                {modalQuery && ` for "${modalQuery}"`}
-              </span> */}
               <div className="flex  gap-4">
                 <div className="flex items-center justify-center gap-2">
                   <button
