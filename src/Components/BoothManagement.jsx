@@ -352,10 +352,24 @@ const BoothListView = ({ onBoothSelect, loadingBoothDetail, onViewVoterDetails }
         const voterData = await response.json();
         setStaticVoters(voterData);
         
-        // Extract unique booths from static data
-        const boothNumbers = [...new Set(voterData.map(v => v.boothNumber).filter(Boolean))];
+        // Extract unique booths from static data and sort numerically
+        const boothNumbers = [...new Set(voterData
+          .map(v => v.boothNumber)
+          .filter(boothNumber => boothNumber && boothNumber.toString().trim() !== '')
+          .map(boothNumber => parseInt(boothNumber) || boothNumber.toString()))];
+        
+        // Sort booth numbers numerically
+        boothNumbers.sort((a, b) => {
+          const numA = parseInt(a) || a;
+          const numB = parseInt(b) || b;
+          if (typeof numA === 'number' && typeof numB === 'number') {
+            return numA - numB;
+          }
+          return String(numA).localeCompare(String(numB));
+        });
+        
         const boothData = boothNumbers.map(boothNumber => {
-          const boothVoters = voterData.filter(v => v.boothNumber === boothNumber);
+          const boothVoters = voterData.filter(v => v.boothNumber == boothNumber);
           const votedCount = boothVoters.filter(v => v.hasVoted || v.voted).length;
           
           return {
@@ -461,7 +475,7 @@ const BoothListView = ({ onBoothSelect, loadingBoothDetail, onViewVoterDetails }
     setLoading(true);
     try {
       // Get static voters for this booth
-      const boothStaticVoters = staticVoters.filter(v => v.boothNumber === booth.boothNumber);
+      const boothStaticVoters = staticVoters.filter(v => v.boothNumber == booth.boothNumber);
       
       // Merge with dynamic data
       const mergedVoters = await mergeDynamicData(boothStaticVoters);
@@ -556,8 +570,16 @@ const BoothListView = ({ onBoothSelect, loadingBoothDetail, onViewVoterDetails }
       return false;
     });
 
-    // sort results by booth number
-    results.sort((a, b) => (a.boothNumber || '').localeCompare(b.boothNumber || ''));
+    // Sort results by booth number numerically
+    results.sort((a, b) => {
+      const numA = parseInt(a.boothNumber) || a.boothNumber;
+      const numB = parseInt(b.boothNumber) || b.boothNumber;
+      if (typeof numA === 'number' && typeof numB === 'number') {
+        return numA - numB;
+      }
+      return String(numA).localeCompare(String(numB));
+    });
+    
     return results;
   }, [booths, searchTerm]);
 
@@ -601,7 +623,15 @@ const BoothListView = ({ onBoothSelect, loadingBoothDetail, onViewVoterDetails }
               karyakartaPhone: karyakarta.phone
             }
             : booth
-        ));
+        ).sort((a, b) => {
+          // Keep the sorted order after update
+          const numA = parseInt(a.boothNumber) || a.boothNumber;
+          const numB = parseInt(b.boothNumber) || b.boothNumber;
+          if (typeof numA === 'number' && typeof numB === 'number') {
+            return numA - numB;
+          }
+          return String(numA).localeCompare(String(numB));
+        }));
 
         await batch.commit();
 
@@ -748,7 +778,7 @@ const BoothListView = ({ onBoothSelect, loadingBoothDetail, onViewVoterDetails }
         </div>
       )}
 
-      {/* Booths List */}
+      {/* Booths List - Now sorted numerically */}
       <div className="p-4 space-y-3">
         {filteredBooths.length === 0 && !loading ? (
           <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
