@@ -28,11 +28,14 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
   const [isFamily, setIsFamily] = useState(false);
   const [voterData, setVoterData] = useState(null);
   const [actionType, setActionType] = useState(''); // 'whatsapp' or 'call'
+  const [imageLoaded, setImageLoaded] = useState(false);
 
   const { candidateInfo } = useCandidate();
 
   // Website URL - update this with your actual domain
   const WEBSITE_URL = "https://prabhag4-bjp.vercel.app/";
+  // Image URL for the receipt
+  const RECEIPT_IMAGE_URL = "https://www.shutterstock.com/image-vector/rajkot-gujarat-india-10-disember-600nw-2400847277.jpg";
 
   useEffect(() => {
     // Initialize from global connection state
@@ -55,8 +58,25 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
     // Prefetch small assets to show preview faster (non-blocking)
     prefetchSitePreview();
 
+    // Preload the receipt image
+    preloadReceiptImage();
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voter]);
+
+  // Preload receipt image
+  const preloadReceiptImage = () => {
+    const img = new Image();
+    img.src = RECEIPT_IMAGE_URL;
+    img.onload = () => {
+      setImageLoaded(true);
+      console.log('Receipt image loaded successfully');
+    };
+    img.onerror = (error) => {
+      console.error('Failed to load receipt image:', error);
+      setImageLoaded(false);
+    };
+  };
 
   // Prefetch homepage (light, non-blocking) to help preview/link open speed
   const prefetchSitePreview = async () => {
@@ -745,11 +765,21 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
     safeDiv.style.left = '-9999px';
 
     let html = `
-      <div style="text-align:center;font-weight:700;font-size:13px;border-bottom:1px solid #000;padding-bottom:8px;">
-        ${escapeHtml(candidateInfo.party)}<br/>
-        <div style="font-size:18px;margin:4px 0;">${escapeHtml(candidateInfo.name)}</div>
-        <div style="font-size:14px;">${escapeHtml(candidateInfo.slogan)}</div>
-        <div style="font-size:14px;margin-top:4px;padding-bottom:8px;">${escapeHtml(candidateInfo.area)}</div>
+      <div style="text-align:center;margin-bottom:10px;">
+        <div style="width:100%;max-height:80px;overflow:hidden;margin-bottom:8px;">
+          <img 
+            src="${RECEIPT_IMAGE_URL}" 
+            alt="Party Logo" 
+            style="width:100%;height:auto;max-height:80px;object-fit:contain;display:block;margin:0 auto;"
+            onerror="this.style.display='none';console.log('Image failed to load');"
+          />
+        </div>
+        <div style="font-weight:700;font-size:13px;border-bottom:1px solid #000;padding-bottom:8px;">
+          ${escapeHtml(candidateInfo.party)}<br/>
+          <div style="font-size:18px;margin:4px 0;">${escapeHtml(candidateInfo.name)}</div>
+          <div style="font-size:14px;">${escapeHtml(candidateInfo.slogan)}</div>
+          <div style="font-size:14px;margin-top:4px;padding-bottom:8px;">${escapeHtml(candidateInfo.area)}</div>
+        </div>
       </div>
     `;
 
@@ -819,6 +849,14 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
         backgroundColor: '#fff',
         useCORS: true,
         width: 230,
+        onclone: (clonedDoc) => {
+          // Ensure image loads properly in the cloned document
+          const img = clonedDoc.querySelector('img');
+          if (img) {
+            img.crossOrigin = 'anonymous';
+            img.src = RECEIPT_IMAGE_URL;
+          }
+        }
       });
 
       const escImage = canvasToEscPosRaster(canvas);
