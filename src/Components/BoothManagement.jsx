@@ -42,6 +42,9 @@ import VoterList from './VoterList';
 // Import VoterContext
 import { VoterContext } from '../Context/VoterContext';
 
+// Add transliteration library
+import { transliterate as tr } from 'transliteration';
+
 // Load Balancer for Firebase operations
 class FirebaseLoadBalancer {
   constructor(maxConcurrent = 3) {
@@ -117,6 +120,64 @@ const saveWithOfflineSupport = async (docId, data, collectionName) => {
     localStorage.setItem('offlineQueue', JSON.stringify(offlineQueue));
     return false;
   }
+};
+
+// Enhanced search function for booth voters with transliteration support
+const searchVotersInBooth = (voters, query) => {
+  if (!query || !query.trim()) return voters;
+
+  const searchTerm = query.toString().trim().toLowerCase();
+  const searchWords = searchTerm.split(/\s+/).filter(word => word.length > 0);
+  
+  // If query is empty after splitting, return all voters
+  if (searchWords.length === 0) return voters;
+
+  return voters.filter(v => {
+    // Extract all searchable fields from voter data
+    const nameMar = (v.name || '').toString().toLowerCase();
+    const nameEng = (v.voterNameEng || v.name || '').toString().toLowerCase();
+    const voterId = (v.voterId || v.id || '').toString().toLowerCase();
+    const serialNumber = (v.serialNumber || '').toString().toLowerCase();
+    const phone = (v.phone || '').toString().toLowerCase();
+    
+    // Check if any field contains ALL search words (AND logic)
+    const matchesAllWords = searchWords.every(word => {
+      // Try direct matches first
+      if (
+        nameMar.includes(word) ||
+        nameEng.includes(word) ||
+        voterId.includes(word) ||
+        serialNumber.includes(word) ||
+        phone.includes(word)
+      ) {
+        return true;
+      }
+
+      // Try transliteration matching for Marathi text
+      try {
+        const translitNameMar = (tr(nameMar) || '').toLowerCase();
+        const translitNameEng = (tr(nameEng) || '').toLowerCase();
+        
+        if (translitNameMar.includes(word) || translitNameEng.includes(word)) {
+          return true;
+        }
+      } catch (err) {
+        // Ignore transliteration errors
+      }
+
+      // Try fuzzy matching for names (allow partial matches)
+      if (searchWords.length > 1) {
+        // Check if word appears as part of any name field
+        if (nameMar.includes(word) || nameEng.includes(word)) {
+          return true;
+        }
+      }
+
+      return false;
+    });
+
+    return matchesAllWords;
+  });
 };
 
 // Pagination Component
@@ -352,24 +413,10 @@ const BoothListView = ({ onBoothSelect, loadingBoothDetail, onViewVoterDetails }
         const voterData = await response.json();
         setStaticVoters(voterData);
         
-        // Extract unique booths from static data and sort numerically
-        const boothNumbers = [...new Set(voterData
-          .map(v => v.boothNumber)
-          .filter(boothNumber => boothNumber && boothNumber.toString().trim() !== '')
-          .map(boothNumber => parseInt(boothNumber) || boothNumber.toString()))];
-        
-        // Sort booth numbers numerically
-        boothNumbers.sort((a, b) => {
-          const numA = parseInt(a) || a;
-          const numB = parseInt(b) || b;
-          if (typeof numA === 'number' && typeof numB === 'number') {
-            return numA - numB;
-          }
-          return String(numA).localeCompare(String(numB));
-        });
-        
+        // Extract unique booths from static data
+        const boothNumbers = [...new Set(voterData.map(v => v.boothNumber).filter(Boolean))];
         const boothData = boothNumbers.map(boothNumber => {
-          const boothVoters = voterData.filter(v => v.boothNumber == boothNumber);
+          const boothVoters = voterData.filter(v => v.boothNumber === boothNumber);
           const votedCount = boothVoters.filter(v => v.hasVoted || v.voted).length;
           
           return {
@@ -475,7 +522,7 @@ const BoothListView = ({ onBoothSelect, loadingBoothDetail, onViewVoterDetails }
     setLoading(true);
     try {
       // Get static voters for this booth
-      const boothStaticVoters = staticVoters.filter(v => v.boothNumber == booth.boothNumber);
+      const boothStaticVoters = staticVoters.filter(v => v.boothNumber === booth.boothNumber);
       
       // Merge with dynamic data
       const mergedVoters = await mergeDynamicData(boothStaticVoters);
@@ -570,16 +617,23 @@ const BoothListView = ({ onBoothSelect, loadingBoothDetail, onViewVoterDetails }
       return false;
     });
 
-    // Sort results by booth number numerically
+    // sort results by booth number (handle numbers and strings safely)
     results.sort((a, b) => {
-      const numA = parseInt(a.boothNumber) || a.boothNumber;
-      const numB = parseInt(b.boothNumber) || b.boothNumber;
-      if (typeof numA === 'number' && typeof numB === 'number') {
-        return numA - numB;
-      }
-      return String(numA).localeCompare(String(numB));
+      const aVal = a.boothNumber;
+      const bVal = b.boothNumber;
+
+      const aNum = Number(aVal);
+      const bNum = Number(bVal);
+
+      const aIsNum = !Number.isNaN(aNum);
+      const bIsNum = !Number.isNaN(bNum);
+
+      // If both are numeric, sort numerically
+      if (aIsNum && bIsNum) return aNum - bNum;
+
+      // Fallback to localeCompare on string values (ensures we call it on strings)
+      return String(aVal || '').localeCompare(String(bVal || ''), undefined, { numeric: true, sensitivity: 'base' });
     });
-    
     return results;
   }, [booths, searchTerm]);
 
@@ -623,15 +677,7 @@ const BoothListView = ({ onBoothSelect, loadingBoothDetail, onViewVoterDetails }
               karyakartaPhone: karyakarta.phone
             }
             : booth
-        ).sort((a, b) => {
-          // Keep the sorted order after update
-          const numA = parseInt(a.boothNumber) || a.boothNumber;
-          const numB = parseInt(b.boothNumber) || b.boothNumber;
-          if (typeof numA === 'number' && typeof numB === 'number') {
-            return numA - numB;
-          }
-          return String(numA).localeCompare(String(numB));
-        }));
+        ));
 
         await batch.commit();
 
@@ -778,7 +824,7 @@ const BoothListView = ({ onBoothSelect, loadingBoothDetail, onViewVoterDetails }
         </div>
       )}
 
-      {/* Booths List - Now sorted numerically */}
+      {/* Booths List */}
       <div className="p-4 space-y-3">
         {filteredBooths.length === 0 && !loading ? (
           <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
@@ -1004,6 +1050,18 @@ const BoothDetailView = ({ booth, onBack, onViewVoterDetails }) => {
   const [loadingVoters, setLoadingVoters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [votersPerPage] = useState(100);
+  
+  // Debounce for search
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+      setCurrentPage(1); // Reset to first page when search changes
+    }, 300);
+    
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   // Handle mark as voted with offline support
   const handleMarkAsVoted = async (voterId, currentStatus) => {
@@ -1130,24 +1188,36 @@ const BoothDetailView = ({ booth, onBack, onViewVoterDetails }) => {
     }
   }, [booth, onBack]);
 
-  const filteredVoters = useMemo(() =>
-    voters.filter(voter => {
-      if (searchTerm && !voter.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-        !voter.voterId.toLowerCase().includes(searchTerm.toLowerCase()) &&
-        !voter.phone.includes(searchTerm)) {
-        return false;
-      }
-
-      switch (filter) {
-        case 'voted': return voter.hasVoted || voter.voted;
-        case 'notVoted': return !(voter.hasVoted || voter.voted);
-        case 'withPhone': return voter.phone;
-        case 'withoutPhone': return !voter.phone;
-        default: return true;
-      }
-    }),
-    [voters, searchTerm, filter]
-  );
+  // Enhanced filteredVoters with the new search function
+  const filteredVoters = useMemo(() => {
+    let result = voters;
+    
+    // Apply search filter first
+    if (debouncedSearchTerm.trim()) {
+      result = searchVotersInBooth(voters, debouncedSearchTerm);
+    }
+    
+    // Apply status filter
+    switch (filter) {
+      case 'voted': 
+        result = result.filter(voter => voter.hasVoted || voter.voted);
+        break;
+      case 'notVoted': 
+        result = result.filter(voter => !(voter.hasVoted || voter.voted));
+        break;
+      case 'withPhone': 
+        result = result.filter(voter => voter.phone);
+        break;
+      case 'withoutPhone': 
+        result = result.filter(voter => !voter.phone);
+        break;
+      default: 
+        // Keep all
+        break;
+    }
+    
+    return result;
+  }, [voters, debouncedSearchTerm, filter]);
 
   // Pagination logic
   const totalPages = Math.ceil(filteredVoters.length / votersPerPage);
@@ -1249,7 +1319,7 @@ const BoothDetailView = ({ booth, onBack, onViewVoterDetails }) => {
               <FiSearch className="absolute left-3 top-3 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search voters by name, ID, or phone..."
+                placeholder="Search voters by Marathi name, English name, Voter ID, Serial, or phone..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 bg-gray-50 rounded-lg border border-gray-200 focus:outline-none focus:ring-1 focus:ring-orange-500 focus:bg-white transition-colors text-sm"
@@ -1270,6 +1340,20 @@ const BoothDetailView = ({ booth, onBack, onViewVoterDetails }) => {
               <FiFilter size={16} />
             </button>
           </div>
+
+          {/* Search Info */}
+          {debouncedSearchTerm && (
+            <div className="mb-2 text-sm text-gray-600">
+              <span>
+                <TranslatedText>Searching for:</TranslatedText> "{debouncedSearchTerm}"
+                {filteredVoters.length > 0 && (
+                  <span className="ml-2 text-gray-800 font-medium">
+                    ({filteredVoters.length} <TranslatedText>results</TranslatedText>)
+                  </span>
+                )}
+              </span>
+            </div>
+          )}
 
           {/* Filters */}
           {showFilters && (
@@ -1325,6 +1409,28 @@ const BoothDetailView = ({ booth, onBack, onViewVoterDetails }) => {
                 )}
               </p>
             </div>
+
+            {/* No Results Message */}
+            {debouncedSearchTerm && filteredVoters.length === 0 && (
+              <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200 mb-4">
+                <FiSearch className="inline text-gray-400 text-3xl mb-3" />
+                <p className="text-gray-600 font-medium">
+                  <TranslatedText>No voters found</TranslatedText>
+                </p>
+                <p className="text-gray-400 text-sm mt-1">
+                  <TranslatedText>Try searching by Marathi name, English name, Voter ID, Serial Number, or Phone</TranslatedText>
+                </p>
+                <div className="mt-3 text-xs text-gray-500">
+                  <TranslatedText>Example searches:</TranslatedText>
+                  <div className="mt-1 space-x-2">
+                    <span className="bg-gray-100 px-2 py-1 rounded">सरप</span>
+                    <span className="bg-gray-100 px-2 py-1 rounded">sarap</span>
+                    <span className="bg-gray-100 px-2 py-1 rounded">ZFV5626809</span>
+                    <span className="bg-gray-100 px-2 py-1 rounded">1</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Use VoterList component */}
             <VoterList 
