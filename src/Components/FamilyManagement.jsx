@@ -21,6 +21,7 @@ import VoterList from './VoterList';
 
 // Add transliteration library (install: npm install transliteration)
 import { transliterate as tr } from 'transliteration';
+ const WEBSITE_URL = "https://prabhag4-bjp.vercel.app/";
 
 const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
   const { voters: allVotersFromContext, refreshVoters } = useContext(VoterContext);
@@ -492,6 +493,8 @@ const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
     });
 
     message += `भारतीय जनता पक्षाचे अधिकृत उमेदवार  यांना भारतीय जनता पक्षाच्या(कमळ) चिन्हावर  मतदान करून प्रचंड बहुमतांनी विजयी करा.\n*आपले उमेदवार:*\n(अ) संदीप रामकृष्ण शेगोकर\n(ब) सौ. शिल्पा किशोर वारोकार\n(क) पल्लवी शिवाजीराव मोरे (गावंडे)\n(ड) मिलिंद उर्फ बाळू राऊत\n`;
+    message += `${WEBSITE_URL}`;
+
 
     return message;
   };
