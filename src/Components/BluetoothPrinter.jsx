@@ -33,9 +33,9 @@ const BluetoothPrinter = ({ voter, familyMembers }) => {
   const { candidateInfo } = useCandidate();
 
    // Website URL - update this with your actual domain
-  const WEBSITE_URL = "https://prabhag4-bjp.vercel.app/";
+  const WEBSITE_URL = "";
   // Image URL for the receipt
-  const RECEIPT_IMAGE_URL = "https://www.shutterstock.com/image-vector/rajkot-gujarat-india-10-disember-600nw-2400847277.jpg";
+  const RECEIPT_IMAGE_URL = "";
 
   // Check if mobile device
   const isMobileDevice = () => {
