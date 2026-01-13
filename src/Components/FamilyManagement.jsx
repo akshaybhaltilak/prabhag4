@@ -21,7 +21,7 @@ import VoterList from './VoterList';
 
 // Add transliteration library (install: npm install transliteration)
 import { transliterate as tr } from 'transliteration';
- const WEBSITE_URL = "https://prabhag4-bjp.vercel.app/";
+ const WEBSITE_URL = "";
 
 const FamilyManagement = ({ voter, onUpdate, candidateInfo }) => {
   const { voters: allVotersFromContext, refreshVoters } = useContext(VoterContext);
